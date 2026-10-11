@@ -24,6 +24,10 @@ scratch/
 deckbuilder/scratch/
 .system_generated/
 
+# Mazos personales privados (evitar subir estrategias a GitHub)
+mazos/*
+!mazos/deida.json
+
 # Archivos de sistema y editores
 .DS_Store
 Thumbs.db
