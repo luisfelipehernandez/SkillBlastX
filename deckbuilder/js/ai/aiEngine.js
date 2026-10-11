@@ -1,0 +1,449 @@
+/**
+ * Skill Blast X - Central AI Engine (Estilo Motor de IA / Skill Blast X)
+ * Orquesta la toma de decisiones, flujo de turno y consultas a los ejecutores de mazo.
+ */
+
+(function(root) {
+  'use strict';
+
+  // Sincronizar referencias en entornos Node / Test
+  if (typeof global !== 'undefined') {
+    if (root && !root.cardsDatabase && global.cardsDatabase) root.cardsDatabase = global.cardsDatabase;
+    if (root && !root.addLog && global.addLog) root.addLog = global.addLog;
+    if (root && !root.shuffleArray && global.shuffleArray) root.shuffleArray = global.shuffleArray;
+  }
+
+  const AIEngine = {
+    activeExecutor: null,
+
+    /**
+     * Obtiene o detecta el ejecutor apropiado según las cartas del mazo rival.
+     */
+    getExecutor() {
+      if (this.activeExecutor) return this.activeExecutor;
+
+      // Buscar si el mazo del oponente tiene arquetipo Haruka
+      const oppDeck = (typeof playtestState !== 'undefined' && playtestState.opponentDeck) ? playtestState.opponentDeck : [];
+      const oppHand = (typeof playtestState !== 'undefined' && playtestState.opponentHand) ? playtestState.opponentHand : [];
+      const oppSlots = (typeof playtestState !== 'undefined' && playtestState.opponentSlots) ? playtestState.opponentSlots : [];
+      const allCards = [...oppDeck, ...oppHand, ...oppSlots.map(s => s?.character).filter(Boolean)];
+
+      const hasHaruka = allCards.some(id => {
+        const c = root.cardsDatabase ? root.cardsDatabase[id] : null;
+        return c && ((c.nombre && c.nombre.includes('Haruka')) || (c.portador && c.portador.includes('Haruka')));
+      });
+
+      if (hasHaruka && root.HarukaExecutor) {
+        this.activeExecutor = root.HarukaExecutor;
+        return this.activeExecutor;
+      }
+
+      // Por defecto fallback a HarukaExecutor si existe
+      return root.HarukaExecutor || null;
+    },
+
+    setExecutor(executor) {
+      this.activeExecutor = executor;
+    },
+
+    /**
+     * Ejecuta el turno completo de la IA paso a paso con registro visual en el log.
+     */
+    async executeOpponentTurn(options = {}) {
+      if (typeof playtestState === 'undefined' || !playtestState) return false;
+      if (playtestState.matchEnded) {
+        if (typeof root.addLog === 'function') {
+          root.addLog(`🏁 [Fin de Partida] El duelo ha concluido. La IA no realiza acciones.`, 'var(--accent-purple)');
+        }
+        return false;
+      }
+      if (playtestState.turnOwner !== 'opponent') return false;
+
+      const executor = this.getExecutor();
+      if (!executor) {
+        console.warn("[AIEngine] No hay un ejecutor configurado para el mazo rival.");
+        return false;
+      }
+
+      const log = (msg, color = 'var(--accent-cyan)') => {
+        if (typeof root.addLog === 'function') root.addLog(msg, color);
+      };
+
+      const delay = (ms) => ((options && options.skipDelay) ? Promise.resolve() : new Promise(resolve => setTimeout(resolve, ms)));
+
+      log(`🤖 <strong>[Turno de la IA: ${executor.name}]</strong> Iniciando secuencia táctica...`, 'var(--accent-purple)');
+      await delay(700);
+
+      // -----------------------------------------------------------------------
+      // PASO 1: Invocación de Personaje a Campo Vacío
+      // -----------------------------------------------------------------------
+      const activeCharCount = (playtestState.opponentSlots || []).filter(s => s && s.character).length;
+      if (activeCharCount === 0) {
+        const summonPlan = executor.chooseCharacterToSummon(playtestState.opponentHand, playtestState.opponentSlots);
+        if (summonPlan) {
+          const charCard = root.cardsDatabase[summonPlan.cardId];
+          playtestState.opponentHand.splice(summonPlan.handIndex, 1);
+          playtestState.opponentSlots[summonPlan.targetSlot] = {
+            character: summonPlan.cardId,
+            skills: [],
+            usedSkills: [],
+            effectUsed: false,
+            attackedThisTurn: false,
+            isRotated: false
+          };
+          log(`🤖 [IA] Invocó a <strong>${charCard?.nombre || summonPlan.cardId}</strong> al Slot ${summonPlan.targetSlot + 1}.`, 'var(--accent-cyan)');
+          if (typeof root.updatePlaytestView === 'function') root.updatePlaytestView();
+          await delay(800);
+        }
+      }
+
+      // -----------------------------------------------------------------------
+      // PASO 1.5: Efectos de Banca Tácticos de la IA
+      // -----------------------------------------------------------------------
+      if (Array.isArray(playtestState.opponentBench) && playtestState.opponentBench.length > 0) {
+        for (let bIdx = 0; bIdx < playtestState.opponentBench.length; bIdx++) {
+          const bItem = playtestState.opponentBench[bIdx];
+          if (!bItem || bItem.effectUsed) continue;
+
+          const card = root.cardsDatabase ? root.cardsDatabase[bItem.id] : null;
+          if (!card) continue;
+
+          const isReady = (typeof root.isBenchEffectReady === 'function')
+            ? root.isBenchEffectReady(card, bItem, 'opponent')
+            : true;
+
+          if (isReady) {
+            let executed = false;
+            if (root.BenchEffects && typeof root.BenchEffects.execute === 'function') {
+              executed = root.BenchEffects.execute(bItem.id, bIdx, 'opponent');
+            } else if (typeof root[`activateOpponent${bItem.id.replace('BBX-', '')}`] === 'function') {
+              executed = root[`activateOpponent${bItem.id.replace('BBX-', '')}`](bIdx);
+            }
+            if (executed !== false) {
+              if (typeof root.updatePlaytestView === 'function') root.updatePlaytestView();
+              await delay(800);
+            }
+          }
+        }
+      }
+
+      // -----------------------------------------------------------------------
+      // PASO 2: Combos desde la Mano (ej. Descarte de Haruka SP331)
+      // -----------------------------------------------------------------------
+      const handCombo = executor.getHandComboAction(playtestState.opponentHand, playtestState.opponentSlots, playtestState.opponentDeck);
+      if (handCombo && handCombo.type === 'activate_sp331') {
+        const targetSlot = playtestState.opponentSlots[handCombo.targetSlot];
+        if (targetSlot) {
+          // Descartar SP331
+          playtestState.opponentHand.splice(handCombo.handIndex, 1);
+          playtestState.opponentGrave.push('BBX-SP331');
+
+          // Portar ¡Voluntad! (BBX-SP008) desde deck
+          const vIdx = playtestState.opponentDeck.indexOf('BBX-SP008');
+          if (vIdx !== -1) {
+            playtestState.opponentDeck.splice(vIdx, 1);
+            targetSlot.skills.push('BBX-SP008');
+          }
+
+          // Enviar skill de Haruka (Fulgor o Ascenso) al cementerio
+          let milledId = null;
+          for (const prefId of handCombo.millCardPreference) {
+            const mIdx = playtestState.opponentDeck.indexOf(prefId);
+            if (mIdx !== -1) {
+              playtestState.opponentDeck.splice(mIdx, 1);
+              playtestState.opponentGrave.push(prefId);
+              milledId = prefId;
+              break;
+            }
+          }
+
+          log(`🤖 [IA] Descartó a <strong>Haruka (SP331)</strong>: Equipó <strong>¡Voluntad!</strong> desde el deck y envió <strong>${root.cardsDatabase[milledId]?.nombre || 'Skill'}</strong> al cementerio.`, 'var(--accent-purple)');
+
+          // Trigger automático de Fulgor ofensivo (SP162)
+          if (milledId === 'BBX-SP162') {
+            const fIdx = playtestState.opponentGrave.indexOf('BBX-SP162');
+            if (fIdx !== -1) {
+              playtestState.opponentGrave.splice(fIdx, 1);
+              targetSlot.skills.push('BBX-SP162');
+              log(`✨ [Efecto Fulgor ofensivo] Se portó automáticamente desde el cementerio a Haruka.`, 'var(--accent-cyan)');
+            }
+          }
+
+          if (typeof root.shuffleArray === 'function') root.shuffleArray(playtestState.opponentDeck);
+          if (typeof root.updatePlaytestView === 'function') root.updatePlaytestView();
+          await delay(800);
+        }
+      }
+
+      // Activaciones tácticas generales de mano para la IA (HandEffects)
+      if (Array.isArray(playtestState.opponentHand) && playtestState.opponentHand.length > 0) {
+        for (let hIdx = 0; hIdx < playtestState.opponentHand.length; hIdx++) {
+          const cardId = playtestState.opponentHand[hIdx];
+          if (!cardId) continue;
+          if (root.HandEffects && typeof root.HandEffects.has === 'function' && root.HandEffects.has(cardId)) {
+            if (cardId === 'BBX-SP092' || cardId === 'BBX-SP098' || cardId === 'BBX-SP223' || cardId === 'BBX-SP340' || cardId === 'BBX-SP373' || cardId === 'BBX-SP360' || cardId === 'BBX-SP154' || cardId === 'BBX-SP114') {
+              const executed = root.HandEffects.execute(cardId, hIdx, 'opponent', { autoSelect: true });
+              if (executed) {
+                if (typeof root.updatePlaytestView === 'function') root.updatePlaytestView();
+                await delay(700);
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      // -----------------------------------------------------------------------
+      // PASO 3: Activación de Efectos en Campo (Personajes y Skills)
+      // -----------------------------------------------------------------------
+      // 3.1: Efectos de Personajes en campo de la IA
+      if (Array.isArray(playtestState.opponentSlots)) {
+        for (let sIdx = 0; sIdx < playtestState.opponentSlots.length; sIdx++) {
+          const s = playtestState.opponentSlots[sIdx];
+          if (!s || !s.character || s.effectUsed) continue;
+          if (root.FieldEffects && typeof root.FieldEffects.canActivateCharacter === 'function' && root.FieldEffects.canActivateCharacter(s.character, sIdx, 'opponent')) {
+            const executed = root.FieldEffects.executeCharacter(s.character, sIdx, 'opponent', { autoSelect: true });
+            if (executed) {
+              if (typeof root.updatePlaytestView === 'function') root.updatePlaytestView();
+              await delay(700);
+            }
+          }
+        }
+      }
+
+      // 3.2: Efectos de Skills equipadas en campo de la IA
+      if (Array.isArray(playtestState.opponentSlots)) {
+        for (let sIdx = 0; sIdx < playtestState.opponentSlots.length; sIdx++) {
+          const s = playtestState.opponentSlots[sIdx];
+          if (!s || !s.character || !Array.isArray(s.skills) || s.skills.length === 0) continue;
+          for (let skIdx = 0; skIdx < s.skills.length; skIdx++) {
+            const skillId = s.skills[skIdx];
+            if (!skillId) continue;
+            if (root.FieldEffects && typeof root.FieldEffects.canActivateSkill === 'function' && root.FieldEffects.canActivateSkill(skillId, sIdx, skIdx, 'opponent')) {
+              const executed = root.FieldEffects.executeSkill(skillId, sIdx, skIdx, 'opponent', { autoSelect: true });
+              if (executed) {
+                if (typeof root.updatePlaytestView === 'function') root.updatePlaytestView();
+                await delay(700);
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      // 3.3: Acciones de campo tácticas del executor (fallback/custom)
+      let fieldAction = executor.getFieldAction(playtestState.opponentSlots, playtestState.opponentHand, playtestState.opponentDeck, playtestState.opponentGrave);
+      if (fieldAction) {
+        if (fieldAction.type === 'activate_voluntad') {
+          const slot = playtestState.opponentSlots[fieldAction.slotIndex];
+          const cannotDraw = playtestState.opponentCannotDrawByEffectsThisTurn || (typeof root.isDrawBySkillBlocked === 'function' && root.isDrawBySkillBlocked('opponent'));
+          const usedSkills = (slot && slot.usedSkills) || [];
+          const globalUsed = playtestState.usedGlobalEffects || [];
+          if (slot && playtestState.opponentDeck.length > 0 && !cannotDraw && !usedSkills.includes('BBX-SP008') && !globalUsed.includes('¡Voluntad!') && !globalUsed.includes('BBX-SP008')) {
+            slot.usedSkills = slot.usedSkills || [];
+            slot.usedSkills.push('BBX-SP008');
+            playtestState.usedGlobalEffects = globalUsed;
+            playtestState.usedGlobalEffects.push('¡Voluntad!');
+            const drawn = playtestState.opponentDeck.shift();
+            playtestState.opponentHand.push(drawn);
+            log(`🤖 [IA] Activó el efecto de <strong>¡Voluntad!</strong> y robó 1 carta de su deck.`, 'var(--accent-cyan)');
+            if (typeof root.updatePlaytestView === 'function') root.updatePlaytestView();
+            await delay(700);
+          }
+        } else if (fieldAction.type === 'activate_desatar') {
+          const slot = playtestState.opponentSlots[fieldAction.slotIndex];
+          const dIdx = slot ? slot.skills.indexOf('BBX-SP023') : -1;
+          const globalUsed = playtestState.usedGlobalEffects || [];
+          if (dIdx !== -1 && !globalUsed.includes('¡Desatar!') && !globalUsed.includes('BBX-SP023')) {
+            slot.skills.splice(dIdx, 1);
+            playtestState.opponentGrave.push('BBX-SP023');
+            playtestState.usedGlobalEffects = globalUsed;
+            playtestState.usedGlobalEffects.push('¡Desatar!');
+            // Revelar 2 del tope
+            const revealed = playtestState.opponentDeck.splice(0, 2);
+            revealed.forEach(id => {
+              if (root.cardsDatabase[id]?.tipo === 'Skill') {
+                playtestState.opponentHand.push(id);
+                log(`🔍 [IA] <strong>¡Desatar!</strong> agregó la Skill <strong>${root.cardsDatabase[id]?.nombre}</strong> a la mano.`, 'var(--accent-cyan)');
+              } else {
+                playtestState.opponentGrave.push(id);
+              }
+            });
+            if (typeof root.updatePlaytestView === 'function') root.updatePlaytestView();
+            await delay(800);
+          }
+        }
+      }
+
+      // -----------------------------------------------------------------------
+      // PASO 4: Equipamiento Táctico (Anti-Overstacking)
+      // -----------------------------------------------------------------------
+      let maxEquipsPerTurn = 2;
+      while (maxEquipsPerTurn > 0) {
+        const equipPlan = executor.getEquipAction(playtestState.opponentHand, playtestState.opponentSlots);
+        if (!equipPlan) break;
+
+        const targetSlot = playtestState.opponentSlots[equipPlan.targetSlotIndex];
+        const cardToEquip = playtestState.opponentHand.splice(equipPlan.handIndex, 1)[0];
+        targetSlot.skills.push(cardToEquip);
+        log(`🛡️ [IA] Equipó <strong>${root.cardsDatabase[cardToEquip]?.nombre}</strong> a ${root.cardsDatabase[targetSlot.character]?.nombre}.`, 'var(--accent-purple)');
+        maxEquipsPerTurn--;
+        if (typeof root.updatePlaytestView === 'function') root.updatePlaytestView();
+        await delay(600);
+      }
+
+      // -----------------------------------------------------------------------
+      // PASO 5: Evolución (Modo Arcano)
+      // -----------------------------------------------------------------------
+      const evoPlan = executor.getEvolutionAction(playtestState.opponentHand, playtestState.opponentSlots);
+      if (evoPlan) {
+        const targetSlot = playtestState.opponentSlots[evoPlan.targetSlotIndex];
+        const evoCardId = playtestState.opponentHand.splice(evoPlan.handIndex, 1)[0];
+        const oldChar = targetSlot.character;
+        targetSlot.character = evoCardId;
+        log(`⚡ [IA] ¡Evolucionó a <strong>Haruka (Modo Arcano Avanzada)</strong> sobre ${root.cardsDatabase[oldChar]?.nombre}!`, 'var(--accent-cyan)');
+
+        // Efecto de Haruka Avanzada BBX-SP244: buscar 1 skill de Haruka en el deck
+        if (evoCardId === 'BBX-SP244') {
+          const harukaSkillIdx = playtestState.opponentDeck.findIndex(id => {
+            const c = root.cardsDatabase[id];
+            return c && c.tipo === 'Skill' && c.portador && c.portador.includes('Haruka');
+          });
+          if (harukaSkillIdx !== -1) {
+            const foundId = playtestState.opponentDeck.splice(harukaSkillIdx, 1)[0];
+            playtestState.opponentHand.push(foundId);
+            log(`📖 [Efecto Haruka Avanzada] Agregó <strong>${root.cardsDatabase[foundId]?.nombre}</strong> de su deck a la mano.`, 'var(--accent-cyan)');
+            if (typeof root.shuffleArray === 'function') root.shuffleArray(playtestState.opponentDeck);
+          }
+        }
+        if (typeof root.updatePlaytestView === 'function') root.updatePlaytestView();
+        await delay(800);
+      }
+
+      // -----------------------------------------------------------------------
+      // PASO 6: Fase de Batalla Inteligente
+      // -----------------------------------------------------------------------
+      const isTurnOne = (playtestState.turnCount || 1) === 1;
+      const playerHasChars = (playtestState.slots || []).some(s => s && s.character);
+
+      if (isTurnOne) {
+        log(`🛡️ [Regla de Turno 1] En el primer turno de la partida no se pueden declarar ataques. La IA finaliza su turno sin combatir.`, 'var(--accent-cyan)');
+        await delay(600);
+      } else if (!playerHasChars) {
+        log(`🛡️ [Regla de Combate] El Jugador no controla ningún Personaje en el campo. Al no existir ataques directos, la IA omite la fase de combate.`, 'var(--accent-cyan)');
+        await delay(600);
+      } else {
+        let maxAttacks = 3;
+        while (maxAttacks > 0) {
+          if (playtestState.matchEnded) break;
+
+          const battlePlan = executor.getBattleAction(playtestState.opponentSlots, playtestState.slots);
+          if (!battlePlan) break;
+
+          const attackerSlot = playtestState.opponentSlots[battlePlan.attackerSlotIndex];
+          const victimSlot = playtestState.slots[battlePlan.targetSlotIndex];
+
+          if (attackerSlot && victimSlot && attackerSlot.character && victimSlot.character) {
+            if (root.BattleEngine && typeof root.BattleEngine.executeAttack === 'function') {
+              root.BattleEngine.executeAttack(battlePlan.attackerSlotIndex, battlePlan.targetSlotIndex, 'opponent');
+            } else {
+              attackerSlot.attackedThisTurn = true;
+              attackerSlot.isRotated = true; // Girar personaje atacante
+              log(`⚔️ [IA Combate] <strong>${root.cardsDatabase[attackerSlot.character]?.nombre}</strong> declara ataque contra <strong>${root.cardsDatabase[victimSlot.character]?.nombre}</strong> (Slot ${battlePlan.targetSlotIndex + 1}).`, 'var(--accent-danger)');
+
+              if (typeof root.resolveStandardDestruction === 'function' && typeof root.resolveOpponentStandardDestruction === 'function') {
+                root.resolveStandardDestruction(battlePlan.targetSlotIndex);
+                root.resolveOpponentStandardDestruction(battlePlan.attackerSlotIndex);
+              } else {
+                // Fallback de combate
+                if (victimSlot.skills && victimSlot.skills.includes('BBX-SP060')) {
+                  log(`🛡️ [Defensa Jugador] Tu personaje activó <strong>Resistir (BBX-SP060)</strong> y no es destruido en combate.`, 'var(--accent-cyan)');
+                } else if (victimSlot.skills && victimSlot.skills.length > 0) {
+                  const destroyedSkill = victimSlot.skills.pop();
+                  playtestState.grave.push(destroyedSkill);
+                  log(`💥 [Combate] La Skill <strong>${root.cardsDatabase[destroyedSkill]?.nombre || destroyedSkill}</strong> de tu personaje fue destruida y enviada al cementerio.`, 'var(--accent-danger)');
+                } else {
+                  const defeatedChar = victimSlot.character;
+                  victimSlot.character = null;
+                  victimSlot.skills = [];
+                  if (!playtestState.bench) playtestState.bench = [];
+                  playtestState.bench.push({ id: defeatedChar, effectUsed: false });
+                  log(`💀 [Combate] Tu personaje <strong>${root.cardsDatabase[defeatedChar]?.nombre}</strong> no tenía Skills: ¡Fue derrotado y enviado a tu banca!`, 'var(--accent-danger)');
+                  if (typeof root.checkMatchEndCondition === 'function') {
+                    root.checkMatchEndCondition();
+                  }
+                }
+              }
+            }
+
+            if (typeof root.checkMatchEndCondition === 'function') {
+              const mEnd = root.checkMatchEndCondition();
+              if (mEnd && mEnd.ended) break;
+            }
+
+            if (typeof root.updatePlaytestView === 'function') root.updatePlaytestView();
+            await delay(900);
+          }
+          maxAttacks--;
+        }
+      }
+
+      // -----------------------------------------------------------------------
+      // PASO 7: Final de Turno y Traspaso
+      // -----------------------------------------------------------------------
+      if (playtestState.matchEnded) {
+        log(`🏁 [Fin de Partida] El duelo ha finalizado.`, 'var(--accent-cyan)');
+        return true;
+      }
+
+      // Reiniciar flags de ataque del oponente
+      (playtestState.opponentSlots || []).forEach(s => {
+        if (s) s.attackedThisTurn = false;
+      });
+
+      // Regla obligatoria de banca para la IA si quedó sin personajes en campo
+      const remainingOppChars = (playtestState.opponentSlots || []).filter(s => s && s.character).length;
+      if (remainingOppChars === 0 && playtestState.opponentDeck.length > 0) {
+        const benchCharIdx = playtestState.opponentDeck.findIndex(id => root.cardsDatabase[id]?.tipo === 'Personaje' && root.cardsDatabase[id]?.clase !== 'Avanzada');
+        if (benchCharIdx !== -1) {
+          const placedBench = playtestState.opponentDeck.splice(benchCharIdx, 1)[0];
+          if (!playtestState.opponentBench) playtestState.opponentBench = [];
+          playtestState.opponentBench.push({ id: placedBench, effectUsed: false });
+          log(`🏛️ [Regla de Banca IA] Al no controlar personajes activos, la IA colocó a <strong>${root.cardsDatabase[placedBench]?.nombre}</strong> en su banca desde su deck.`, 'var(--accent-purple)');
+          if (typeof root.checkMatchEndCondition === 'function') {
+            const mEnd = root.checkMatchEndCondition();
+            if (mEnd && mEnd.ended) return true;
+          }
+        }
+      }
+
+      log(`🏁 [IA] Finalizó su turno. Turno transferido al <strong>Jugador</strong>.`, 'var(--accent-cyan)');
+      await delay(600);
+
+      // Traspasar el turno al jugador mediante la secuencia oficial de cambio de turno
+      if (typeof root.toggleTurnOwner === 'function') {
+        try {
+          root.toggleTurnOwner();
+        } catch (err) {
+          console.error("Error al transferir el turno con toggleTurnOwner:", err);
+          if (typeof root.proceedToNextTurn === 'function') {
+            root.proceedToNextTurn();
+          }
+        }
+      } else if (typeof root.proceedToNextTurn === 'function') {
+        root.proceedToNextTurn();
+      } else {
+        playtestState.turnOwner = 'player';
+        playtestState.turnCount = (playtestState.turnCount || 1) + 1;
+        if (typeof root.updatePlaytestView === 'function') root.updatePlaytestView();
+      }
+      return true;
+    }
+  };
+
+  if (root) root.AIEngine = AIEngine;
+  if (typeof window !== 'undefined') window.AIEngine = AIEngine;
+  if (typeof global !== 'undefined') global.AIEngine = AIEngine;
+  if (typeof globalThis !== 'undefined') globalThis.AIEngine = AIEngine;
+
+})(typeof window !== 'undefined' ? window : (typeof global !== 'undefined' ? global : this));

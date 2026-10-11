@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Skill Blast X - Deckbuilder & Playtest</title>
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="stylesheet" href="style.css?v=101">
+</head>
+<body>
+  <!-- Contenedor Principal de la App -->
+  <div class="app-container">
+    
+    <!-- Barra de Navegación Superior -->
+    <header class="app-header hidden-header">
+      <div style="display: flex; align-items: center; gap: 16px;">
+        <button id="btn-back-to-menu" class="btn btn-secondary" onclick="showScreen('main-menu')" style="display: flex; align-items: center; gap: 6px; font-weight: 700; border-color: var(--accent-cyan); color: var(--accent-cyan); padding: 5px 14px; font-size: 0.8rem; border-radius: 8px;">
+          ⬅ Menú Principal
+        </button>
+        <div class="logo-area">
+          <span class="logo-accent">Skill Blast X</span>
+          <span class="logo-subtitle">Battle Card Game</span>
+        </div>
+      </div>
+      <nav class="nav-tabs">
+        <button id="tab-deckbuilder" class="nav-tab active" onclick="switchTab('deckbuilder')">Creador de Mazos</button>
+        <button id="tab-playtest" class="nav-tab" onclick="switchTab('playtest')">Mesa de Pruebas</button>
+      </nav>
+    </header>
+
+    <!-- 0. Sección de Menú Principal (Oficial Skill Blast X) -->
+    <main id="section-main-menu" class="tab-content active-content main-menu-section">
+      <div class="main-menu-wrapper">
+        
+        <!-- Cabecera / Logotipo Principal -->
+        <div class="main-menu-brand">
+          <div class="brand-badge">BETA v1.0 • 429 CARTAS REGISTRADAS</div>
+          <h1 class="brand-title">SKILL BLAST <span class="brand-x">X</span></h1>
+          <p class="brand-tagline">AUTOMATED BATTLE CARD GAME SIMULATOR</p>
+        </div>
+
+        <!-- Panel de Opciones Oficial -->
+        <div class="main-menu-options">
+          <button class="menu-card-btn menu-card-duel" onclick="openDuelSetupModal()">
+            <div class="menu-card-icon">⚔️</div>
+            <div class="menu-card-body">
+              <span class="menu-card-title">DUELO (VS IA)</span>
+            </div>
+            <div class="menu-card-arrow">➔</div>
+          </button>
+
+          <button class="menu-card-btn menu-card-deck" onclick="showScreen('deckbuilder')">
+            <div class="menu-card-icon">🃏</div>
+            <div class="menu-card-body">
+              <span class="menu-card-title">CREADOR DE MAZOS</span>
+            </div>
+            <div class="menu-card-arrow">➔</div>
+          </button>
+
+          <button class="menu-card-btn menu-card-rules" onclick="openRulesModal()">
+            <div class="menu-card-icon">📖</div>
+            <div class="menu-card-body">
+              <span class="menu-card-title">REGLAS & BANLIST</span>
+            </div>
+            <div class="menu-card-arrow">➔</div>
+          </button>
+
+          <button class="menu-card-btn menu-card-exit" onclick="exitGame()">
+            <div class="menu-card-icon">🚪</div>
+            <div class="menu-card-body">
+              <span class="menu-card-title">SALIR</span>
+            </div>
+            <div class="menu-card-arrow">✕</div>
+          </button>
+        </div>
+
+        <!-- Footer / Créditos -->
+        <div class="main-menu-footer">
+          <span>SKILL BLAST X 2026</span>
+        </div>
+
+      </div>
+    </main>
+
+    <!-- 1. Sección del Deckbuilder -->
+    <main id="section-deckbuilder" class="tab-content">
+      <div class="deckbuilder-layout">
+        
+        <!-- Panel Izquierdo: Colección de Cartas y Filtros -->
+        <section class="collection-panel glass-panel">
+          <div class="panel-header">
+            <h2>Colección de Cartas</h2>
+            <div class="search-box">
+              <input type="text" id="search-input" placeholder="Buscar por nombre o efecto..." oninput="filterCards()">
+            </div>
+            <div class="filters-grid">
+              <div class="filter-group">
+                <label for="filter-tipo">Tipo</label>
+                <select id="filter-tipo" onchange="filterCards()">
+                  <option value="all">Todos</option>
+                  <option value="Personaje">Personajes</option>
+                  <option value="Skill">Skills</option>
+                </select>
+              </div>
+              <div class="filter-group">
+                <label for="filter-clase">Clase</label>
+                <select id="filter-clase" onchange="filterCards()">
+                  <option value="all">Todas</option>
+                  <option value="Normal">Normal</option>
+                  <option value="Avanzada">Avanzada</option>
+                </select>
+              </div>
+              <div class="filter-group">
+                <label for="filter-banlist">Banlist</label>
+                <select id="filter-banlist" onchange="filterCards()">
+                  <option value="all">Todas</option>
+                  <option value="Prohibida">Prohibidas</option>
+                  <option value="Limitada">Limitadas</option>
+                  <option value="Semilimitada">Semilimitadas</option>
+                  <option value="Ninguna">Sin restricción</option>
+                </select>
+              </div>
+              <div class="filter-group">
+                <label for="filter-portador">Portador</label>
+                <select id="filter-portador" onchange="filterCards()">
+                  <option value="all">Cualquiera</option>
+                  <!-- Dinámico -->
+                </select>
+              </div>
+            </div>
+          </div>
+          
+          <div class="collection-scroll">
+            <div id="collection-grid" class="collection-grid">
+              <!-- Cargado dinámicamente -->
+            </div>
+          </div>
+        </section>
+
+        <!-- Panel Central/Derecho: Visor Detallado y Editor de Mazo -->
+        <section class="editor-panel">
+          
+          <!-- Visor de Carta Seleccionada -->
+          <div class="card-viewer-container glass-panel">
+            <div id="card-detail-view" class="card-detail-view">
+              <div class="detail-img-container">
+                <img id="detail-img" src="" alt="Previsualización de carta" class="hidden" style="display: none;">
+                <div id="detail-img-placeholder" class="detail-placeholder">Pasa el cursor por encima de una carta</div>
+              </div>
+              <div class="detail-info">
+                <h3 id="detail-name">Selecciona una carta</h3>
+                <div class="detail-meta">
+                  <span id="detail-type" class="badge">Tipo</span>
+                  <span id="detail-class" class="badge badge-accent hidden">Avanzada</span>
+                  <span id="detail-ban" class="badge badge-danger hidden">Prohibida</span>
+                </div>
+                <div id="detail-carrier-container" class="detail-carrier hidden">
+                  <strong>Portador:</strong> <span id="detail-carrier">Ninguno</span>
+                </div>
+                <p id="detail-effect" class="detail-effect-text">Los efectos se mostrarán aquí en detalle.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Editor de Mazo Actual -->
+          <div class="deck-editor glass-panel">
+            <div class="deck-header">
+              <div class="deck-stats">
+                <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                  <h2>Tu Mazo Actual</h2>
+                  <span id="active-deck-name-display" class="deck-name-badge" title="Mazo activo">📄 Sin Guardar</span>
+                </div>
+                <div class="stats-badges">
+                  <span class="stat-badge">Mazo Principal: <strong id="main-count">0 / 35</strong></span>
+                  <span class="stat-badge">Side Deck: <strong id="side-count">0 / 10</strong></span>
+                </div>
+              </div>
+              <div class="deck-actions sbx-deck-toolbar">
+                <select id="local-decks-select" class="btn btn-secondary" onchange="loadDeckFromSelector(this.value)" style="max-width: 175px; padding-right: 8px;" title="Seleccionar Mazo Activo">
+                  <option value="">-- Cargar Mazo --</option>
+                </select>
+                <button class="btn btn-primary" onclick="saveActiveDeck()" title="Guardar cambios en el mazo activo actual">Guardar</button>
+                <button class="btn btn-secondary" onclick="saveDeckAs()" title="Guardar como un nuevo mazo (asigna nombre)">Guardar como</button>
+                <button class="btn btn-secondary" onclick="renameActiveDeck()" title="Renombrar el mazo activo actual">Renombrar</button>
+                <button class="btn btn-secondary btn-danger-hover" onclick="deleteActiveDeck()" title="Eliminar el mazo activo">Borrar</button>
+                <button class="btn btn-secondary" onclick="clearDeck()" title="Quitar todas las cartas del mazo en pantalla (sin guardar)">Limpiar</button>
+                <button class="btn btn-secondary" onclick="shuffleDeckView()" title="Barajar visualmente las cartas del mazo">Barajar</button>
+                <button class="btn btn-secondary" onclick="sortDeckView()" title="Ordenar las cartas del mazo (Personajes y Skills)">Ordenar</button>
+                <button class="btn btn-secondary" onclick="triggerLoadDeck()" title="Importar mazo desde archivo JSON local">Importar</button>
+                <input type="file" id="load-file-input" accept=".json" style="display: none;" onchange="loadDeckFromFile(event)">
+              </div>
+            </div>
+
+            <div class="deck-scroll">
+              <div class="deck-sections-container">
+                <!-- Mazo Principal -->
+                <div class="deck-section-group">
+                  <h3>Mazo Principal (exactamente 35 cartas)</h3>
+                  <div id="main-deck-container" class="deck-grid main-deck-grid">
+                    <!-- Dinámico -->
+                  </div>
+                </div>
+
+                <!-- Side Deck -->
+                <div class="deck-section-group">
+                  <h3>Mazo Lateral / Side Deck (máximo 10 cartas)</h3>
+                  <div id="side-deck-container" class="deck-grid side-deck-grid">
+                    <!-- Dinámico -->
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+      </div>
+    </main>
+
+    <!-- Sección de Playtest (Mesa de Pruebas / Duelo Oficial) -->
+    <main id="section-playtest" class="tab-content">
+      <div class="playtest-layout sbx-layout">
+        
+        <!-- 1. Panel Lateral Izquierdo Unificado (Visor + Registro Skill Blast X) -->
+        <aside id="playtest-viewer-sidebar" class="playtest-viewer-sidebar glass-panel">
+          <!-- Botones de Acción Superior -->
+          <div class="sidebar-top-actions">
+            <button class="btn-sidebar-action btn-sidebar-exit" onclick="showScreen('main-menu')" title="Volver al Menú Principal">🚪 Salir</button>
+            <button class="btn-sidebar-action btn-sidebar-reset" onclick="restartPlaytest()" title="Reiniciar el Duelo">🔄 Reiniciar</button>
+            <button class="btn-sidebar-action btn-sidebar-options" onclick="openDuelSetupModal()" title="Configuración de Duelo">⚙ Opciones</button>
+          </div>
+
+          <!-- Previsualización Grande de Carta -->
+          <div class="playtest-viewer-img-container">
+            <img id="playtest-viewer-img" src="" alt="Previsualización de carta" class="hidden">
+            <div id="playtest-viewer-placeholder" class="playtest-viewer-placeholder">Pasa el cursor sobre una carta</div>
+          </div>
+
+          <!-- Pestañas Skill Blast X: Información / Registro -->
+          <div class="sidebar-tabs">
+            <button id="sidebar-tab-card" class="sidebar-tab-btn active" onclick="switchSidebarTab('card')">Información</button>
+            <button id="sidebar-tab-log" class="sidebar-tab-btn" onclick="switchSidebarTab('log')">Registro de Duelo</button>
+          </div>
+
+          <!-- Pestaña 1: Información de Carta -->
+          <div id="sidebar-view-card" class="sidebar-tab-content active">
+            <div class="playtest-viewer-info">
+              <h3 id="playtest-viewer-name">Detalles de Carta</h3>
+              <div class="playtest-viewer-meta">
+                <span id="playtest-viewer-type" class="badge">Tipo</span>
+                <span id="playtest-viewer-carrier-badge" class="badge badge-accent hidden">Portador</span>
+              </div>
+              <p id="playtest-viewer-effect" class="playtest-viewer-effect-text">Pasa el cursor sobre una carta del campo, mano o cementerio para inspeccionarla.</p>
+            </div>
+          </div>
+
+          <!-- Pestaña 2: Registro de Duelo (Log integrado sin robar espacio al tapete) -->
+          <div id="sidebar-view-log" class="sidebar-tab-content hidden">
+            <div class="sidebar-log-wrapper">
+              <div id="playtest-log" class="log-body-mat">
+                <div style="color: var(--text-muted);">Mesa inicializada.</div>
+              </div>
+            </div>
+          </div>
+        </aside>
+        
+        <!-- 2. Área Principal del Duelo a la Derecha -->
+        <section class="playtest-board">
+          
+          <!-- Barra Superior Minimalista (~40px) -->
+          <div class="playtest-header-bar glass-panel">
+            <div class="playtest-header-left">
+              <span id="turn-badge-indicator" class="turn-badge player-turn">TURNO 1: TU TURNO</span>
+
+              <!-- Barra de Fases Dinámica Oficial -->
+              <div class="phase-track-bar">
+                <span id="phase-step-start" class="phase-pill" title="Fase de Inicio: Robo y Efectos Iniciales">1. INICIO</span>
+                <span class="phase-arrow">➔</span>
+                <span id="phase-step-main" class="phase-pill active" title="Fase Principal: Invocación, Skills y Combate">2. PRINCIPAL</span>
+                <span class="phase-arrow">➔</span>
+                <span id="phase-step-end" class="phase-pill" title="Fase Final: Resolución y Fin de Turno">3. FINAL</span>
+              </div>
+
+              <button id="btn-toggle-turn" class="btn-toggle-turn-sbx" onclick="toggleTurnOwner()">Turno: Jugador</button>
+              <button id="btn-pass-turn" class="btn-pass-turn-sbx" onclick="startNewTurn()">⚔️ TERMINAR TURNO</button>
+              <button id="btn-sound-toggle" class="btn-sound-toggle" onclick="AnimationEngine.toggleSound()" title="Activar/Silenciar Efectos de Sonido">🔊 SFX</button>
+            </div>
+
+            <div class="playtest-header-right">
+              <div class="tournament-strip">
+                <span id="tournament-timer-label" class="timer-label">Ronda:</span>
+                <span id="tournament-timer" class="timer-val">30:00</span>
+                <button class="btn-mini-timer" onclick="toggleTournamentTimer()" title="Play / Pausa">⏱</button>
+                <button class="btn-mini-timer" onclick="setSideDeckTimer()" title="Tiempo de Side Deck">Side (2m)</button>
+                <span class="bo3-divider">|</span>
+                <span class="bo3-label">Bo3:</span>
+                <span id="bo3-score-victories" class="score-num victory">0</span>
+                <span class="score-dash">-</span>
+                <span id="bo3-score-defeats" class="score-num defeat">0</span>
+                <button class="btn-score-mini" onclick="adjustBo3Score('victories', 1)">+V</button>
+                <button class="btn-score-mini" onclick="adjustBo3Score('defeats', 1)">+D</button>
+                <button class="btn-score-mini" onclick="resetBo3Score()" title="Reiniciar marcador">↺</button>
+              </div>
+            </div>
+
+            <!-- Contadores ocultos para compatibilidad JS 100% -->
+            <div style="display:none;" aria-hidden="true">
+              <span id="playtest-deck-count">0</span>
+              <span id="playtest-grave-count">0</span>
+              <span id="playtest-bench-count">0</span>
+              <span id="playtest-opp-deck-count">0</span>
+              <span id="playtest-opp-grave-count-top">0</span>
+              <span id="playtest-opp-bench-count-top">0</span>
+              <span id="playtest-opp-hand-count">0</span>
+            </div>
+          </div>
+          
+          <!-- Tapete de Duelo Espacioso (Ocupa todo el centro/alto) -->
+          <div class="playtest-arena-wrapper">
+            
+            <!-- Mano Rival (Arriba en el tapete, cartas flotando) -->
+            <div class="arena-opp-hand-bar">
+              <span class="opp-hand-badge">MANO RIVAL (<span id="playtest-opp-hand-count-visible">0</span>)</span>
+              <div id="playtest-opp-hand" class="hand-container-mat-mini opponent-hand-mini opp-hand-strip">
+                <!-- Cartas boca abajo del oponente -->
+              </div>
+            </div>
+
+            <!-- Tapete de Batalla con Perspectiva 3D -->
+            <div class="playtest-mat-wrapper">
+              <div class="playtest-mat">
+                
+                <!-- 1. CAMPO DEL OPONENTE -->
+                <div class="playtest-mat-opponent">
+                  <div class="mat-upper-row opponent-row">
+                    
+                    <!-- Banca Oponente -->
+                    <div class="mat-zone-banca" id="opp-bench-visible-dropzone" ondragover="allowDrop(event)" ondrop="handleDropOnOpponentBench(event)">
+                      <div class="zone-label-mini">BANCA RIVAL</div>
+                      <div id="playtest-opp-bench" class="bench-slots-container-mini">
+                        <!-- Cartas en la banca del oponente -->
+                      </div>
+                    </div>
+                    
+                    <!-- Campo del Oponente (3 Slots) -->
+                    <div class="mat-zone-campo">
+                      <div class="character-slot-mat opponent-slot" id="opp-char-slot-2" ondragover="allowDrop(event)" ondrop="handleDropOnOpponentSlot(event, 2)">
+                        <div class="slot-placeholder">Rival Campo 3<br><small style="font-size:0.55rem; opacity:0.6;">(Vacío)</small></div>
+                      </div>
+                      <div class="character-slot-mat opponent-slot" id="opp-char-slot-1" ondragover="allowDrop(event)" ondrop="handleDropOnOpponentSlot(event, 1)">
+                        <div class="slot-placeholder">Rival Campo 2<br><small style="font-size:0.55rem; opacity:0.6;">(Vacío)</small></div>
+                      </div>
+                      <div class="character-slot-mat opponent-slot" id="opp-char-slot-0" ondragover="allowDrop(event)" ondrop="handleDropOnOpponentSlot(event, 0)">
+                        <div class="slot-placeholder">Rival Campo 1<br><small style="font-size:0.55rem; opacity:0.6;">(Vacío)</small></div>
+                      </div>
+                    </div>
+                    
+                    <!-- Recursos Oponente (Deck y Grave Rival) -->
+                    <div class="mat-zone-recursos">
+                      <!-- Cementerio Oponente -->
+                      <div class="grave-zone-mat-mini opponent-grave" id="opp-grave-dropzone" ondragover="allowDrop(event)" ondrop="handleDropOnOpponentGrave(event)" onclick="showOpponentGraveModal()">
+                        <span class="pile-name-mat-mini">CEM</span>
+                        <div class="grave-count-badge-mat" id="playtest-opp-grave-badge">0</div>
+                      </div>
+                      <!-- Deck Oponente -->
+                      <div class="deck-zone-mat-mini opponent-deck" onclick="opponentDrawCard()">
+                        <div class="pile-back-mat-mini red-back" id="opp-deck-card-back">
+                          <div class="deck-count-overlay-mat-mini" id="playtest-opp-deck-badge">0</div>
+                          <span class="pile-name-mat-mini">DECK</span>
+                        </div>
+                      </div>
+                    </div>
+                    
+                  </div>
+                </div>
+                
+                <!-- Línea Divisoria de Combate -->
+                <div class="mat-center-divider">
+                  <div class="divider-line"></div>
+                  <span class="divider-text">⚔️ ZONA DE COMBATE ⚔️</span>
+                  <div class="divider-line"></div>
+                </div>
+
+                <!-- 2. CAMPO DEL JUGADOR -->
+                <div class="playtest-mat-player">
+                  <div class="mat-upper-row player-row">
+                    
+                    <!-- Banca Jugador -->
+                    <div class="mat-zone-banca" id="bench-visible-dropzone" ondragover="allowDrop(event)" ondrop="handleDropOnBench(event)">
+                      <div class="zone-label-mini">TU BANCA</div>
+                      <div id="playtest-bench" class="bench-slots-container-mini">
+                        <!-- Cartas en la banca del jugador -->
+                      </div>
+                    </div>
+                    
+                    <!-- Campo del Jugador (3 Slots) -->
+                    <div class="mat-zone-campo">
+                      <div class="character-slot-mat" id="char-slot-0" ondragover="allowDrop(event)" ondrop="handleDropOnSlot(event, 0)">
+                        <div class="slot-placeholder">Campo 1<br><small style="font-size:0.55rem; opacity:0.6;">(Vacío)</small></div>
+                      </div>
+                      <div class="character-slot-mat" id="char-slot-1" ondragover="allowDrop(event)" ondrop="handleDropOnSlot(event, 1)">
+                        <div class="slot-placeholder">Campo 2<br><small style="font-size:0.55rem; opacity:0.6;">(Vacío)</small></div>
+                      </div>
+                      <div class="character-slot-mat" id="char-slot-2" ondragover="allowDrop(event)" ondrop="handleDropOnSlot(event, 2)">
+                        <div class="slot-placeholder">Campo 3<br><small style="font-size:0.55rem; opacity:0.6;">(Vacío)</small></div>
+                      </div>
+                    </div>
+                    
+                    <!-- Recursos Jugador -->
+                    <div class="mat-zone-recursos">
+                      <!-- Cementerio Jugador -->
+                      <div class="grave-zone-mat-mini" id="grave-dropzone" ondragover="allowDrop(event)" ondrop="handleDropOnGrave(event)" onclick="showGraveModal()">
+                        <span class="pile-name-mat-mini">CEM</span>
+                        <div class="grave-count-badge-mat" id="playtest-grave-badge">0</div>
+                      </div>
+                      <!-- Deck Jugador -->
+                      <div class="deck-zone-mat-mini" onclick="drawCard()">
+                        <div class="pile-back-mat-mini" id="deck-card-back">
+                          <div class="deck-count-overlay-mat-mini" id="playtest-deck-badge">0</div>
+                          <span class="pile-name-mat-mini">DECK</span>
+                        </div>
+                      </div>
+                    </div>
+                    
+                  </div>
+                </div>
+                
+              </div>
+            </div>
+
+            <!-- Tu Mano (Abajo en primer plano, cartas limpias flotando) -->
+            <div class="arena-player-hand-bar">
+              <div id="playtest-hand" class="hand-container-mat-mini player-hand-strip">
+                <!-- Cartas en la mano del jugador -->
+              </div>
+            </div>
+
+          </div>
+          
+        </section>
+
+      </div>
+    </main>
+
+  </div>
+
+  <!-- Modal de Configuración de Duelo vs IA (Oficial) -->
+  <div id="duel-setup-modal" class="modal-overlay hidden">
+    <div class="modal-content glass-panel" style="max-width: 620px;">
+      <div class="modal-header">
+        <h3 style="display: flex; align-items: center; gap: 8px;">⚔️ Configuración de Duelo vs IA</h3>
+        <button class="modal-close" onclick="closeDuelSetupModal()">×</button>
+      </div>
+      <div class="modal-body" style="display: flex; flex-direction: column; gap: 18px; padding: 20px;">
+        
+        <!-- Selección de Mazo Propio -->
+        <div class="setup-group">
+          <label style="font-weight: 700; color: var(--accent-cyan); display: flex; justify-content: space-between; align-items: center;">
+            <span>TU MAZO (JUGADOR):</span>
+            <span id="duel-player-deck-status" style="font-size: 0.8rem; font-weight: 600;">Cargando...</span>
+          </label>
+          <div style="display: flex; gap: 8px; margin-top: 6px;">
+            <select id="duel-player-deck-select" class="btn btn-secondary" style="flex: 1; text-align: left;" onchange="onDuelPlayerDeckChange()">
+              <option value="__current__">-- Mazo actual del editor --</option>
+            </select>
+            <button class="btn btn-secondary" onclick="closeDuelSetupModal(); showScreen('deckbuilder');" title="Ir a editar mazo">✏️ Editar</button>
+          </div>
+        </div>
+
+        <!-- Selección de Mazo Rival -->
+        <div class="setup-group">
+          <label style="font-weight: 700; color: var(--accent-purple); display: flex; justify-content: space-between; align-items: center;">
+            <span>MAZO DEL RIVAL (IA):</span>
+            <span id="duel-opp-deck-status" style="font-size: 0.8rem; font-weight: 600;">Listo</span>
+          </label>
+          <div style="display: flex; gap: 8px; margin-top: 6px;">
+            <select id="duel-opp-deck-select" class="btn btn-secondary" style="flex: 1; text-align: left;" onchange="onDuelOppDeckChange()">
+              <option value="__current__">-- Mazo actual del editor --</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Quién empieza -->
+        <div class="setup-group">
+          <label style="font-weight: 700; color: var(--text-bright);">QUIÉN COMIENZA EL DUELO:</label>
+          <div style="display: flex; gap: 10px; margin-top: 6px;">
+            <label class="radio-option" style="flex: 1; background: rgba(0,0,0,0.3); padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-glass); cursor: pointer; display: flex; align-items: center; gap: 8px;">
+              <input type="radio" name="duel-first-player" value="dice" checked> 🎲 Lanzar Dado (Oficial)
+            </label>
+            <label class="radio-option" style="flex: 1; background: rgba(0,0,0,0.3); padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-glass); cursor: pointer; display: flex; align-items: center; gap: 8px;">
+              <input type="radio" name="duel-first-player" value="player"> 👤 Yo primero
+            </label>
+            <label class="radio-option" style="flex: 1; background: rgba(0,0,0,0.3); padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-glass); cursor: pointer; display: flex; align-items: center; gap: 8px;">
+              <input type="radio" name="duel-first-player" value="opponent"> 🤖 Rival primero
+            </label>
+          </div>
+        </div>
+
+        <!-- Botones de Acción -->
+        <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 10px;">
+          <button class="btn btn-secondary" onclick="closeDuelSetupModal()">Cancelar</button>
+          <button id="btn-start-duel" class="btn btn-primary" onclick="confirmAndLaunchDuel()" style="padding: 10px 24px; font-size: 1rem; font-weight: 800;">
+            ⚔️ ¡INICIAR DUELO!
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal de Reglas y Banlist Oficial -->
+  <div id="rules-banlist-modal" class="modal-overlay hidden">
+    <div class="modal-content glass-panel" style="max-width: 780px; max-height: 85vh; display: flex; flex-direction: column;">
+      <div class="modal-header">
+        <div style="display: flex; gap: 12px; align-items: center;">
+          <button id="tab-rules-btn" class="nav-tab active" onclick="switchRulesTab('rules')">📖 Reglamento Oficial</button>
+          <button id="tab-banlist-btn" class="nav-tab" onclick="switchRulesTab('banlist')">🚫 Banlist Oficial</button>
+        </div>
+        <button class="modal-close" onclick="closeRulesModal()">×</button>
+      </div>
+      <div class="modal-body" style="overflow-y: auto; padding: 20px; flex: 1;">
+        
+        <!-- Pestaña Reglas -->
+        <div id="rules-content" style="display: block; line-height: 1.6;">
+          <h3 style="color: var(--accent-cyan); margin-bottom: 8px;">🎯 Objetivo y Condiciones de Victoria</h3>
+          <p>Derrotar a <strong>3 Personajes</strong> del adversario para ganar el duelo (o la partida en formato Bo3).</p>
+          
+          <h3 style="color: var(--accent-cyan); margin-top: 16px; margin-bottom: 8px;">📦 Construcción de Mazos (Deckbuilding)</h3>
+          <ul style="margin-left: 20px;">
+            <li><strong>Mazo Principal:</strong> Exactamente <strong>35 cartas obligatorias</strong>.</li>
+            <li><strong>Side Deck:</strong> De <strong>0 a 10 cartas</strong> como máximo (opcional).</li>
+            <li><strong>Límite de copias:</strong> Hasta <strong>3 copias</strong> de una misma carta (salvo que la Banlist oficial indique lo contrario). Las cartas se identifican por su ID de serie único (ej. <code>BBX-SP001</code>).</li>
+          </ul>
+
+          <h3 style="color: var(--accent-cyan); margin-top: 16px; margin-bottom: 8px;">⏱️ Ciclo de Turnos (3 Tiempos Oficiales)</h3>
+          <ol style="margin-left: 20px;">
+            <li><strong>Inicio de Turno:</strong> Se roba 1 carta del mazo (salvo el primer turno del jugador que va primero). Se disparan y resuelven los efectos con condición <em>"al inicio de tu turno"</em> o <em>"al inicio del turno"</em>.</li>
+            <li><strong>Fase Principal:</strong> Puedes invocar Personajes a tus slots libres (máximo 3 en campo), equipar Skills a sus portadores válidos, activar efectos de campo, mano o cementerio, y <strong>declarar ataques</strong> (girando a los personajes a posición horizontal).</li>
+            <li><strong>Final de Turno:</strong> Al pulsar <em>Terminar Turno</em>, se sigue un orden estricto de resolución:
+              <ul style="margin-top: 4px; margin-bottom: 6px; padding-left: 20px;">
+                <li><strong>1º. Efectos de fin de turno:</strong> Se activan y resuelven <em>siempre primero</em> todos los efectos que correspondan al final del turno.</li>
+                <li><strong>2º. Regla obligatoria de banca (siempre al final):</strong> Si tras resolverse todos los efectos de fin de turno no controlas ningún Personaje activo en juego, debes colocar 1 Personaje desde tu deck en la banca.</li>
+                <li><strong>3º. Paso de turno:</strong> Inmediatamente el turno pasa formalmente al oponente.</li>
+              </ul>
+            </li>
+          </ol>
+
+          <h3 style="color: var(--accent-cyan); margin-top: 16px; margin-bottom: 8px;">⚔️ Dinámica de Combate y Skills</h3>
+          <ul style="margin-left: 20px;">
+            <li>Las <strong>Skills portadas</strong> actúan como vidas/escudos obligatorios. Al combatir, ambos personajes pierden 1 Skill (enviada al cementerio).</li>
+            <li>Si un personaje sin Skills es atacado, es <strong>derrotado y enviado a la banca</strong>.</li>
+            <li><strong>Regla de robo en banca:</strong> Solo se roba 1 carta si el personaje fue derrotado por batalla (no si fue enviado a la banca por efectos).</li>
+          </ul>
+        </div>
+
+        <!-- Pestaña Banlist -->
+        <div id="banlist-content" style="display: none; line-height: 1.6;">
+          <h3 style="color: var(--accent-danger); margin-bottom: 8px;">🚫 Prohibidas (0 copias)</h3>
+          <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 8px;">No se permite ninguna copia en el Mazo Principal ni en el Side Deck.</p>
+          <div id="banlist-forbidden-grid" class="modal-cards-grid" style="grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); margin-bottom: 20px;"></div>
+
+          <h3 style="color: var(--accent-warning); margin-bottom: 8px;">⚠️ Limitadas (Máximo 1 copia)</h3>
+          <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 8px;">Máximo 1 copia combinada entre Mazo Principal y Side Deck.</p>
+          <div id="banlist-limited-grid" class="modal-cards-grid" style="grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); margin-bottom: 20px;"></div>
+
+          <h3 style="color: var(--accent-cyan); margin-bottom: 8px;">🔶 Semilimitadas (Máximo 2 copias)</h3>
+          <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 8px;">Máximo 2 copias combinadas entre Mazo Principal y Side Deck.</p>
+          <div id="banlist-semilimited-grid" class="modal-cards-grid" style="grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));"></div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal para ver el Cementerio o la Banca -->
+  <div id="pile-modal" class="modal-overlay hidden">
+    <div class="modal-content glass-panel">
+      <div class="modal-header">
+        <h3 id="modal-title">Cementerio</h3>
+        <button class="modal-close" onclick="closeModal()">×</button>
+      </div>
+      <div class="modal-body">
+        <div id="modal-cards-grid" class="modal-cards-grid">
+          <!-- Cartas del cementerio/banca -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal para seleccionar Personaje Inicial -->
+  <div id="starter-modal" class="modal-overlay hidden">
+    <div class="modal-content glass-panel" style="max-width: 600px;">
+      <div class="modal-header">
+        <h3>Selecciona tu Personaje Inicial</h3>
+      </div>
+      <div class="modal-body">
+        <div id="starter-cards-grid" class="modal-cards-grid" style="grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));">
+          <!-- Personajes cargados dinámicamente -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal para Revelar Cartas Secuencialmente ("Desatar" / efectos) -->
+  <div id="reveal-modal" class="modal-overlay hidden">
+    <div class="modal-content glass-panel" style="max-width: 450px; text-align: center;">
+      <div class="modal-header" style="justify-content: center;">
+        <h3 id="reveal-modal-title">Revelando Cartas...</h3>
+      </div>
+      <div class="modal-body" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; min-height: 320px; overflow: visible;">
+        <div id="reveal-card-display" class="reveal-card-animate">
+          <!-- Carta animada -->
+        </div>
+        <div id="reveal-card-info" style="font-size: 1rem; font-weight: 700; color: var(--accent-cyan); height: 24px; text-transform: uppercase;"></div>
+        <div id="reveal-progress" style="font-size: 0.8rem; color: var(--text-muted);">Carta 0 de 0</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Menú Contextual flotante oficial -->
+  <div id="card-context-menu" class="context-menu hidden">
+    <!-- Opciones dinámicas -->
+  </div>
+
+  <!-- Overlay Dado 3D Animado -->
+  <div id="dice-overlay" class="dice-overlay-mat">
+    <div class="dice-title" id="dice-title-text">¡Lanzando dado de 6 caras!</div>
+    <div class="cube-throwing-container" id="dice-throw-container">
+      <div class="dice-container">
+        <div class="cube" id="dice-cube">
+          <div class="face front">1</div>
+          <div class="face back">2</div>
+          <div class="face right">3</div>
+          <div class="face left">4</div>
+          <div class="face top">5</div>
+          <div class="face bottom">6</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Overlay para Lanzamiento de Moneda 3D -->
+  <div id="coin-overlay" class="coin-overlay-mat">
+    <div class="coin-title" id="coin-title-text">🪙 ¡Lanzando moneda! 🪙</div>
+    <div class="coin-throwing-container" id="coin-throw-container">
+      <div class="coin-container">
+        <div class="coin-disc" id="coin-disc">
+          <div class="coin-face coin-front">👑<br>CARA</div>
+          <div class="coin-face coin-back">🛡️<br>SELLO</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Core Modular Engine -->
+  <script src="js/core/rulesEngine.js?v=101"></script>
+  <script src="js/core/dispatcher.js?v=101"></script>
+  <script src="js/effects/graveEffects.js?v=101"></script>
+  <script src="js/effects/handEffects.js?v=101"></script>
+  <script src="js/effects/benchEffects.js?v=101"></script>
+  <script src="js/effects/fieldEffects.js?v=101"></script>
+  <script src="js/effects/expansionSetEffects.js?v=101"></script>
+  <script src="js/battle/battleEngine.js?v=101"></script>
+  <script src="js/ai/aiDecks.js?v=101"></script>
+  <script src="js/ai/executors/harukaExecutor.js?v=101"></script>
+  <script src="js/ai/aiEngine.js?v=101"></script>
+  <script src="js/ui/animationEngine.js?v=101"></script>
+
+  <script src="app.js?v=101"></script>
+</body>
+</html>

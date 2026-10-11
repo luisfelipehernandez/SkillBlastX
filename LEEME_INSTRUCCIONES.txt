@@ -1,0 +1,49 @@
+================================================================================
+                       SKILL BLAST X - BATTLE CARD GAME
+                     SIMULADOR OFICIAL & CREADOR DE MAZOS
+================================================================================
+
+¡Bienvenido a Skill Blast X!
+Este paquete contiene el simulador completo con 429 cartas registradas,
+sistema de duelos automáticos contra la Inteligencia Artificial y mesa de pruebas.
+
+--------------------------------------------------------------------------------
+¿CÓMO JUGAR? (INSTRUCCIONES RÁPIDAS)
+--------------------------------------------------------------------------------
+
+1. CÓMO ABRIR EL JUEGO:
+   - Simplemente haz doble clic en el archivo "SkillBlastX.exe".
+   - El juego se abrirá automáticamente en una ventana de escritorio independiente.
+   - ¡No necesitas instalar Python, Node.js ni configurar nada adicional!
+
+2. MODOS DE JUEGO PRINCIPALES:
+   - ⚔️ DUELO (VS IA):
+     Juega partidas completas contra la IA. Puedes elegir tu mazo y el mazo
+     de la IA para poner a prueba tus estrategias.
+   - 🃏 CREADOR DE MAZOS (Deckbuilder):
+     Explora las 429 cartas, filtra por arquetipos, personajes o habilidades,
+     arma tu mazo de 35 cartas principales y guárdalo.
+   - 🧪 MESA DE PRUEBAS (Playtest oficial):
+     Prueba combos y prepara situaciones hipotéticas enfrentándote a una copia
+     de tu propio mazo con la mano rival visible, siguiendo las reglas oficiales.
+
+3. REGLAS BÁSICAS DE DUELO:
+   - En el Turno 1 no se pueden declarar ataques.
+   - Cuando dos personajes combaten, ambos se infligen daño mutuo ("se pegan").
+   - Un personaje con Skills equipadas pierde 1 Skill al recibir daño en batalla.
+   - Un personaje sin Skills es derrotado y se retira a la Banca.
+   - La Banca representa la vida del duelista: ¡el primer jugador cuya banca
+     acumule 3 personajes derrotados pierde la partida!
+
+--------------------------------------------------------------------------------
+CONTENIDO DE ESTA CARPETA:
+--------------------------------------------------------------------------------
+- SkillBlastX.exe   -> Ejecutable principal del juego.
+- cartas.json       -> Base de datos oficial con las 429 cartas.
+- imagenes/         -> Imágenes en alta calidad de todas las cartas.
+- mazos/            -> Mazos guardados para el Jugador.
+- mazos_ia/         -> Mazos competitivos para la Inteligencia Artificial.
+- deckbuilder/      -> Motor visual y módulos de lógica del simulador.
+
+¡Que disfrutes del juego!
+================================================================================

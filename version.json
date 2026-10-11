@@ -1,0 +1,9 @@
+{
+  "version": "1.0.0",
+  "version_code": 1,
+  "release_date": "2026-10-11",
+  "name": "Skill Blast X",
+  "description": "Simulador oficial con 429 cartas, IA competitiva y motor visual dinámico",
+  "repo_url": "https://github.com/luisfelipehernandez/SkillBlastX",
+  "raw_base_url": "https://raw.githubusercontent.com/luisfelipehernandez/SkillBlastX/main/"
+}

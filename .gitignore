@@ -1,0 +1,31 @@
+# Dependencias y compilaciones
+__pycache__/
+*.py[cod]
+*$py.class
+node_modules/
+build/
+dist/
+deckbuilder/build/
+deckbuilder/dist/
+installer_build/
+
+# Archivos ejecutables y empaquetados pesados
+*.exe
+*.zip
+*.tar.gz
+
+# Logs y cachés
+*.log
+crash.log
+.cache/
+
+# Carpetas de pruebas temporales y desarrollo
+scratch/
+deckbuilder/scratch/
+.system_generated/
+
+# Archivos de sistema y editores
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
