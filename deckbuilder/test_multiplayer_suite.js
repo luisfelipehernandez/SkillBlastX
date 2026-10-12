@@ -159,6 +159,14 @@ toggleTurnOwner();
 assert(global.playtestState.turnOwner === 'opponent', '6.5 toggleTurnOwner no debe cambiar de turno manualmente en online');
 console.log('  ✔ PASS: 6.5 toggleTurnOwner bloquea alternar turnos manualmente en online');
 
+// 9. Validación del tiempo de consulta de Lyna (BBX-SP403)
+const mpEngineCode = fs.readFileSync(path.join(__dirname, 'js', 'network', 'multiplayerEngine.js'), 'utf8');
+const starterFn = mpEngineCode.match(/function handleLocalStarterSelected\([\s\S]*?\n  \}/)[0];
+assert(!starterFn.includes('openLynaStarterChoiceModal'), '6.6 handleLocalStarterSelected NO debe consultar por Lyna al colocarla boca abajo');
+const finalizeFn = mpEngineCode.match(/function finalizeMatchStart\([\s\S]*?\n  \}/)[0];
+assert(finalizeFn.includes('openLynaStarterChoiceModal'), '6.6 finalizeMatchStart SÍ debe consultar por Lyna al momento de voltear los personajes');
+console.log('  ✔ PASS: 6.6 Lyna (BBX-SP403) se consulta estrictamente al momento de voltear los personajes boca arriba');
+
 console.log('\n======================================================');
 console.log('🎉 TODAS LAS PRUEBAS DE MULTIPLAYER ENGINE PASARON (100%)');
 console.log('======================================================\n');

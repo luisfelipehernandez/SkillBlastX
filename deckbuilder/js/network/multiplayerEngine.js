@@ -16,12 +16,16 @@ const MultiplayerEngine = (() => {
   let localStarterChosen = false;
   let localStarterId = null;
   let localShuffledDeck = null;
+  let localLynaResolved = false;
   let localLyna5 = false;
   let oppStarterChosen = false;
   let oppStarterId = null;
   let oppShuffledDeck = null;
+  let oppLynaResolved = false;
   let oppLyna5 = false;
   let coinFlipStarted = false;
+  let handsDealt = false;
+  let pendingWeStartFirst = false;
 
   // Generador de código de sala limpio y legible (ej: SBX-7K9A)
   function generateRoomCode() {
@@ -83,12 +87,16 @@ const MultiplayerEngine = (() => {
     localStarterChosen = false;
     localStarterId = null;
     localShuffledDeck = null;
+    localLynaResolved = false;
     localLyna5 = false;
     oppStarterChosen = false;
     oppStarterId = null;
     oppShuffledDeck = null;
+    oppLynaResolved = false;
     oppLyna5 = false;
     coinFlipStarted = false;
+    handsDealt = false;
+    pendingWeStartFirst = false;
 
     // Normalizar ID para el servidor público de PeerJS (sin guiones raros)
     const peerId = `sbx_${roomCode.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
@@ -178,12 +186,16 @@ const MultiplayerEngine = (() => {
     localStarterChosen = false;
     localStarterId = null;
     localShuffledDeck = null;
+    localLynaResolved = false;
     localLyna5 = false;
     oppStarterChosen = false;
     oppStarterId = null;
     oppShuffledDeck = null;
+    oppLynaResolved = false;
     oppLyna5 = false;
     coinFlipStarted = false;
+    handsDealt = false;
+    pendingWeStartFirst = false;
 
     const hostPeerId = `sbx_${rawCode.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
 
@@ -283,7 +295,6 @@ const MultiplayerEngine = (() => {
         oppStarterChosen = true;
         oppStarterId = packet.starterId;
         oppShuffledDeck = packet.shuffledDeck;
-        oppLyna5 = !!packet.lyna5;
 
         if (typeof playtestState !== 'undefined') {
           playtestState.opponentSlots[1].character = oppStarterId;
@@ -300,6 +311,17 @@ const MultiplayerEngine = (() => {
         if (typeof updatePlaytestView === 'function') updatePlaytestView();
 
         checkBothStartersPlaced();
+        break;
+
+      case 'LYNA_CHOICE':
+        oppLynaResolved = true;
+        oppLyna5 = !!packet.wants5;
+        if (oppLyna5) {
+          if (typeof addLog === 'function') addLog(`[Efecto Lyna BBX-SP403 Rival] El rival activó el efecto de Lyna y comenzará con <strong>5 cartas</strong> de mano inicial.`, 'var(--accent-purple)');
+        } else {
+          if (typeof addLog === 'function') addLog(`[Efecto Lyna BBX-SP403 Rival] El rival decidió comenzar con <strong>3 cartas</strong> de mano inicial.`, 'var(--text-muted)');
+        }
+        checkReadyToDealHands();
         break;
 
       case 'START_COIN_FLIP':
@@ -452,36 +474,17 @@ const MultiplayerEngine = (() => {
 
     if (typeof updatePlaytestView === 'function') updatePlaytestView();
 
-    const proceedSendStarter = (wants5) => {
-      localLyna5 = wants5;
-      sendPacket({
-        type: 'STARTER_CHOSEN',
-        starterId: localStarterId,
-        shuffledDeck: localShuffledDeck,
-        lyna5: localLyna5
-      });
+    sendPacket({
+      type: 'STARTER_CHOSEN',
+      starterId: localStarterId,
+      shuffledDeck: localShuffledDeck
+    });
 
-      if (typeof addLog === 'function') {
-        addLog(`Has colocado tu Personaje Inicial boca abajo en el campo. Esperando al rival...`, 'var(--accent-cyan)');
-      }
-
-      checkBothStartersPlaced();
-    };
-
-    if (selectedId === 'BBX-SP403') {
-      if (typeof openLynaStarterChoiceModal === 'function') {
-        openLynaStarterChoiceModal((wants5) => {
-          proceedSendStarter(wants5);
-        });
-      } else if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
-        const wants5 = window.confirm("¿Deseas activar el efecto de Lyna (BBX-SP403) para comenzar la partida con 5 cartas en tu mano en lugar de 3?");
-        proceedSendStarter(wants5);
-      } else {
-        proceedSendStarter(true);
-      }
-    } else {
-      proceedSendStarter(false);
+    if (typeof addLog === 'function') {
+      addLog(`Has colocado tu Personaje Inicial boca abajo en el campo. Esperando al rival...`, 'var(--accent-cyan)');
     }
+
+    checkBothStartersPlaced();
   }
 
   // 8. VERIFICAR SI AMBOS PERSONAJES INICIALES ESTÁN COLOCADOS
@@ -585,6 +588,54 @@ const MultiplayerEngine = (() => {
     if (typeof addLog === 'function') {
       addLog(`[Personajes Revelados] ¡Se voltean los Personajes Iniciales! Jugador: <strong>${myName}</strong> | Oponente: <strong>${oppName}</strong>.`, 'var(--accent-cyan)');
     }
+    if (typeof updatePlaytestView === 'function') updatePlaytestView();
+
+    // Consulta de Lyna (BBX-SP403) al momento de ser volteada boca arriba
+    pendingWeStartFirst = weStartFirst;
+    localLynaResolved = (localStarterId !== 'BBX-SP403');
+    oppLynaResolved = (oppStarterId !== 'BBX-SP403');
+
+    if (localStarterId === 'BBX-SP403') {
+      const applyLynaChoice = (wants5) => {
+        localLynaResolved = true;
+        localLyna5 = wants5;
+        sendPacket({
+          type: 'LYNA_CHOICE',
+          wants5: wants5
+        });
+        if (wants5) {
+          if (typeof addLog === 'function') addLog(`[Efecto Lyna BBX-SP403] Activaste su efecto de Personaje Inicial y comenzarás con <strong>5 cartas</strong> en tu mano en lugar de 3.`, 'var(--accent-purple)');
+        } else {
+          if (typeof addLog === 'function') addLog(`[Efecto Lyna BBX-SP403] Decidiste comenzar con <strong>3 cartas</strong> de mano inicial.`, 'var(--text-muted)');
+        }
+        checkReadyToDealHands();
+      };
+
+      if (typeof openLynaStarterChoiceModal === 'function') {
+        openLynaStarterChoiceModal((wants5) => applyLynaChoice(wants5));
+      } else if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
+        const wants5 = window.confirm("¿Deseas activar el efecto de Lyna (BBX-SP403) para comenzar la partida con 5 cartas en tu mano en lugar de 3?");
+        applyLynaChoice(wants5);
+      } else {
+        applyLynaChoice(true);
+      }
+    } else {
+      localLyna5 = false;
+    }
+
+    if (oppStarterId === 'BBX-SP403') {
+      if (typeof addLog === 'function') {
+        addLog(`Tu rival ha revelado a Lyna (BBX-SP403) y está decidiendo si activar su efecto inicial...`, 'var(--text-muted)');
+      }
+    }
+
+    checkReadyToDealHands();
+  }
+
+  // 11. REPARTIR MANOS INICIALES Y COMENZAR TURNO 1
+  function checkReadyToDealHands() {
+    if (!localLynaResolved || !oppLynaResolved || handsDealt) return;
+    handsDealt = true;
 
     // Mano inicial reglamentaria: 3 cartas (o 5 si Lyna activada)
     const myHandCount = (localStarterId === 'BBX-SP403' && localLyna5) ? 5 : 3;
@@ -604,11 +655,11 @@ const MultiplayerEngine = (() => {
     if (typeof addLog === 'function') {
       addLog(`Robaste <strong>${myHandCount} cartas</strong> de mano inicial.`);
       addLog(`Tu rival robó <strong>${oppHandCount} cartas</strong> de mano inicial.`);
-      addLog(`⚔️ ¡Comienza el Duelo Online! ${weStartFirst ? 'Tú comienzas el Turno 1' : 'Tu rival comienza el Turno 1'}.`, 'var(--accent-cyan)');
+      addLog(`⚔️ ¡Comienza el Duelo Online! ${pendingWeStartFirst ? 'Tú comienzas el Turno 1' : 'Tu rival comienza el Turno 1'}.`, 'var(--accent-cyan)');
     }
 
     if (typeof window !== 'undefined' && window.AnimationEngine && typeof window.AnimationEngine.showPhaseBanner === 'function') {
-      window.AnimationEngine.showPhaseBanner(weStartFirst ? "TURNO 1: TU TURNO" : "TURNO 1: TURNO RIVAL");
+      window.AnimationEngine.showPhaseBanner(pendingWeStartFirst ? "TURNO 1: TU TURNO" : "TURNO 1: TURNO RIVAL");
     }
 
     if (typeof updatePlaytestView === 'function') updatePlaytestView();
@@ -833,12 +884,16 @@ const MultiplayerEngine = (() => {
     localStarterChosen = false;
     localStarterId = null;
     localShuffledDeck = null;
+    localLynaResolved = false;
     localLyna5 = false;
     oppStarterChosen = false;
     oppStarterId = null;
     oppShuffledDeck = null;
+    oppLynaResolved = false;
     oppLyna5 = false;
     coinFlipStarted = false;
+    handsDealt = false;
+    pendingWeStartFirst = false;
 
     const initialView = document.getElementById('mp-create-initial');
     const waitingView = document.getElementById('mp-create-waiting');
