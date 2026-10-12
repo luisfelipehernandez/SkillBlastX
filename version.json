@@ -1,9 +1,9 @@
 {
-  "version": "1.0.1",
-  "version_code": 2,
-  "release_date": "2026-10-11",
+  "version": "1.1.0",
+  "version_code": 3,
+  "release_date": "2026-10-12",
   "name": "Skill Blast X",
-  "description": "Simulador oficial con 429 cartas, IA competitiva y motor visual dinámico",
+  "description": "Modo Multijugador Online P2P (1v1), 429 cartas oficiales e IA competitiva",
   "repo_url": "https://github.com/luisfelipehernandez/SkillBlastX",
   "raw_base_url": "https://raw.githubusercontent.com/luisfelipehernandez/SkillBlastX/main/"
 }

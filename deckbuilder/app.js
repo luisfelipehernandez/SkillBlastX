@@ -2092,6 +2092,10 @@ function drawCard(sourceType) {
   // Lanzar la hermosa animación visual
   animateCardDraw('player', drawnId);
   
+  if (typeof MultiplayerEngine !== 'undefined' && MultiplayerEngine.isConnected()) {
+    MultiplayerEngine.sendPacket({ type: 'ACTION_DRAW_CARD' });
+  }
+
   updatePlaytestView();
   if (sourceType === 'character' || sourceType === 'skill') {
     checkAndTriggerServicioImpecable('player', sourceType);
@@ -2149,8 +2153,37 @@ function animateCardDraw(owner = 'player', cardId = null, cb = null) {
   }, 500);
 }
 
+function passOnlineTurnToOpponent() {
+  playtestState.slots.forEach(slot => {
+    slot.effectUsed = false;
+    slot.usedSkills = [];
+    slot.usedSkillIndexes = [];
+    slot.maxAttacks = 1;
+    slot.attacksDeclared = 0;
+  });
+  playtestState.turnOwner = 'opponent';
+  if (typeof updateTurnBadgeUI === 'function') updateTurnBadgeUI();
+  const btn = document.getElementById('btn-toggle-turn');
+  if (btn) {
+    btn.textContent = "Turno: Oponente (Rival)";
+    btn.style.borderColor = "var(--accent-purple)";
+    btn.style.color = "var(--accent-purple)";
+  }
+  addLog(`⚔️ Has terminado tu turno. Ahora es el turno de tu rival.`, 'var(--text-muted)');
+  updatePlaytestView();
+}
+
 // Botón de Nuevo Turno (Restaura efectos "Una vez por turno")
 function startNewTurn() {
+  if (typeof MultiplayerEngine !== 'undefined' && MultiplayerEngine.isConnected()) {
+    if (playtestState.turnOwner !== 'player') {
+      alert("Es el turno de tu rival.");
+      return;
+    }
+    MultiplayerEngine.sendPacket({ type: "ACTION_END_TURN" });
+    passOnlineTurnToOpponent();
+    return;
+  }
   if (playtestState.isDuelVsAI) {
     if (playtestState.turnOwner === 'player') {
       toggleTurnOwner();
@@ -16625,6 +16658,14 @@ if (typeof global !== 'undefined') global.SKILLS_WITHOUT_FIELD_ACTIVATION = SKIL
             slot.isRotated = true;
           }
 
+          if (typeof MultiplayerEngine !== 'undefined' && MultiplayerEngine.isConnected()) {
+            MultiplayerEngine.sendPacket({
+              type: 'ACTION_ATTACK',
+              attackerSlot: slotIndex,
+              targetSlot: oppSlotIdx
+            });
+          }
+
           addLog(`⚔ <strong>${card.nombre}</strong> declara un ataque contra <strong>${defenderCard.nombre}</strong> (Ataque ${slot.attacksDeclared}/${slot.maxAttacks || 1} de este turno).`, 'var(--accent-danger)');
 
           if (defenderSlot && defenderSlot.character === 'BBX-SP319') {
@@ -18388,6 +18429,15 @@ function invokeCharacter(cardId, handIndex, slotIndex) {
   
   if (typeof window !== 'undefined' && window.AnimationEngine && window.AnimationEngine.SoundFX) {
     window.AnimationEngine.SoundFX.playPlace();
+  }
+
+  if (typeof MultiplayerEngine !== 'undefined' && MultiplayerEngine.isConnected()) {
+    MultiplayerEngine.sendPacket({
+      type: 'ACTION_PLAY_CHARACTER',
+      slot: slotIndex,
+      cardId: cardId,
+      isEvolucion: isEvolucion
+    });
   }
 
   updatePlaytestView();
@@ -21038,6 +21088,15 @@ function equipSkill(cardId, handIndex, slotIndex) {
   if (typeof window !== 'undefined' && window.AnimationEngine && window.AnimationEngine.SoundFX) {
     window.AnimationEngine.SoundFX.playPlace();
   }
+
+  if (typeof MultiplayerEngine !== 'undefined' && MultiplayerEngine.isConnected()) {
+    MultiplayerEngine.sendPacket({
+      type: 'ACTION_PLAY_SKILL',
+      slot: slotIndex,
+      cardId: cardId
+    });
+  }
+
   addLog(`Equipaste <strong>${card.nombre}</strong> a ${charCard.nombre}.`);
   updatePlaytestView();
 }
@@ -32510,6 +32569,14 @@ function activateBenchEffect(index) {
   if (card.id !== 'BBX-SP367' && playtestState.turnOwner !== 'player') {
     alert("Solo puedes activar efectos de banca durante tu propio turno.");
     return;
+  }
+
+  if (typeof MultiplayerEngine !== 'undefined' && MultiplayerEngine.isConnected()) {
+    MultiplayerEngine.sendPacket({
+      type: 'ACTION_ACTIVATE_BENCH',
+      slot: index,
+      cardId: card.id
+    });
   }
 
   // Void-oh BBX-SP367
