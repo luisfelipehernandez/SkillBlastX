@@ -1263,6 +1263,10 @@ function addLog(text, color = 'var(--text-main)') {
   if (logTabBtn && !logTabBtn.classList.contains('active')) {
     logTabBtn.classList.add('has-unread');
   }
+
+  if (typeof playtestState !== 'undefined' && playtestState.isOnlineMatch && typeof MultiplayerEngine !== 'undefined' && typeof MultiplayerEngine.syncLogIfLocal === 'function') {
+    MultiplayerEngine.syncLogIfLocal(text);
+  }
 }
 
 function loadCurrentDeckToPlaytest() {
@@ -2180,6 +2184,9 @@ function passOnlineTurnToOpponent() {
     slot.maxAttacks = 1;
     slot.attacksDeclared = 0;
   });
+  playtestState.usedGlobalEffects = [];
+  playtestState.activatedSkillNamesThisTurn = [];
+  playtestState.cannotDrawByEffectsThisTurn = false;
   playtestState.turnOwner = 'opponent';
   if (typeof updateTurnBadgeUI === 'function') updateTurnBadgeUI();
   const btn = document.getElementById('btn-toggle-turn');
@@ -2199,8 +2206,8 @@ function startNewTurn() {
       alert("Es el turno de tu rival.");
       return;
     }
-    MultiplayerEngine.sendPacket({ type: "ACTION_END_TURN" });
     passOnlineTurnToOpponent();
+    MultiplayerEngine.sendPacket({ type: "ACTION_END_TURN" });
     return;
   }
   if (playtestState.isDuelVsAI) {
@@ -5997,23 +6004,29 @@ function updatePlaytestView() {
       const card = cardsDatabase[bItem.id];
       const cardEl = document.createElement('div');
       cardEl.className = 'bench-card';
-      cardEl.draggable = true;
+      cardEl.draggable = !playtestState.isOnlineMatch;
       cardEl.id = `opp-bench-card-${index}`;
       cardEl.innerHTML = `<img src="/imagenes/${card.imagen}" alt="${card.nombre}">`;
       attachCardHover(cardEl, bItem.id);
       
       if (bItem.effectUsed) {
         cardEl.style.filter = 'grayscale(0.6) brightness(0.6)';
-      } else if (isBenchEffectReady(card, bItem, 'opponent')) {
+      } else if (!playtestState.isOnlineMatch && isBenchEffectReady(card, bItem, 'opponent')) {
         cardEl.classList.add('can-activate');
       }
 
-      cardEl.addEventListener('dragstart', (e) => {
-        e.dataTransfer.setData('text/plain', JSON.stringify({ source: 'opp-bench', id: bItem.id, index: index }));
-      });
+      if (!playtestState.isOnlineMatch) {
+        cardEl.addEventListener('dragstart', (e) => {
+          e.dataTransfer.setData('text/plain', JSON.stringify({ source: 'opp-bench', id: bItem.id, index: index }));
+        });
+      }
 
       cardEl.addEventListener('click', (e) => {
         e.stopPropagation();
+        if (playtestState.isOnlineMatch) {
+          if (typeof showCardDetail === 'function') showCardDetail(bItem.id);
+          return;
+        }
         showOpponentBenchCardMenu(e, bItem, index);
       });
 
@@ -6115,7 +6128,7 @@ function updatePlaytestView() {
         cardEl.innerHTML = `<img src="/imagenes/${card.imagen}" alt="${card.nombre}">`;
         attachCardHover(cardEl, slotData.character);
       }
-      cardEl.draggable = true;
+      cardEl.draggable = !playtestState.isOnlineMatch;
       
       cardEl.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -6141,9 +6154,11 @@ function updatePlaytestView() {
       });
       cardEl.appendChild(skillsContainer);
       
-      cardEl.addEventListener('dragstart', (e) => {
-        e.dataTransfer.setData('text/plain', JSON.stringify({ source: `opp-slot-${i}`, id: slotData.character }));
-      });
+      if (!playtestState.isOnlineMatch) {
+        cardEl.addEventListener('dragstart', (e) => {
+          e.dataTransfer.setData('text/plain', JSON.stringify({ source: `opp-slot-${i}`, id: slotData.character }));
+        });
+      }
       
       slotEl.appendChild(cardEl);
     } else {
@@ -6153,6 +6168,11 @@ function updatePlaytestView() {
   
   // Verificar si hay efectos activables en el cementerio para hacerlo parpadear
   checkGraveActivableEffects();
+
+  // Sincronizar automáticamente cualquier cambio en banca, mano, campo, mazo o cementerio durante duelos online
+  if (playtestState.isOnlineMatch && typeof MultiplayerEngine !== 'undefined' && typeof MultiplayerEngine.syncStateIfChanged === 'function') {
+    MultiplayerEngine.syncStateIfChanged();
+  }
 }
 
 function checkGraveActivableEffects() {

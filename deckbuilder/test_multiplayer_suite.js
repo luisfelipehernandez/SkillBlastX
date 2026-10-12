@@ -167,6 +167,73 @@ const finalizeFn = mpEngineCode.match(/function finalizeMatchStart\([\s\S]*?\n  
 assert(finalizeFn.includes('openLynaStarterChoiceModal'), '6.6 finalizeMatchStart SÍ debe consultar por Lyna al momento de voltear los personajes');
 console.log('  ✔ PASS: 6.6 Lyna (BBX-SP403) se consulta estrictamente al momento de voltear los personajes boca arriba');
 
+// 10. Validación de Sincronización Espejo de Banca y Zonas (Efecto Deida BBX-SP258 -> Banca Rival)
+console.log('\n--- SECCIÓN 7: Sincronización Espejo de Banca, Mano y Mazo (SYNC_STATE) ---');
+assert(typeof MultiplayerEngine.getBoardStateSnapshot === 'function', '7.1 getBoardStateSnapshot debe estar expuesta');
+assert(typeof MultiplayerEngine.applyRemoteStateSync === 'function', '7.2 applyRemoteStateSync debe estar expuesta');
+assert(typeof MultiplayerEngine.syncStateIfChanged === 'function', '7.3 syncStateIfChanged debe estar expuesta');
+
+// Simular que el Jugador A activa el efecto de Deida (BBX-SP258) y envía a Helica (BBX-SP011) del mazo a su banca
+global.playtestState = {
+  isOnlineMatch: true,
+  turnOwner: 'player',
+  slots: [
+    { character: null, skills: [], isFaceDown: false },
+    { character: 'BBX-SP258', skills: [], isFaceDown: false, effectUsed: true },
+    { character: null, skills: [], isFaceDown: false }
+  ],
+  opponentSlots: [
+    { character: null, skills: [], isFaceDown: false },
+    { character: 'BBX-SP326', skills: [], isFaceDown: false, effectUsed: false },
+    { character: null, skills: [], isFaceDown: false }
+  ],
+  bench: [{ id: 'BBX-SP011', effectUsed: false }], // Helica puesta en la banca por Deida
+  opponentBench: [],
+  hand: ['BBX-SP098', 'BBX-SP098'],
+  opponentHand: ['BBX-SP001', 'BBX-SP002', 'BBX-SP003'],
+  deck: new Array(28).fill('BBX-SP001'),
+  opponentDeck: new Array(31).fill('BBX-SP004'),
+  grave: ['BBX-SP098'],
+  opponentGrave: []
+};
+
+const snapshotFromPlayerA = MultiplayerEngine.getBoardStateSnapshot();
+assert(snapshotFromPlayerA.bench.length === 1 && snapshotFromPlayerA.bench[0].id === 'BBX-SP011', '7.4 Snapshot captura el personaje en la banca del jugador activo');
+
+// Ahora simular la pantalla del Jugador B (Oponente) antes de recibir el paquete SYNC_STATE
+global.playtestState = {
+  isOnlineMatch: true,
+  turnOwner: 'opponent',
+  slots: [
+    { character: null, skills: [], isFaceDown: false },
+    { character: 'BBX-SP326', skills: [], isFaceDown: false, effectUsed: false },
+    { character: null, skills: [], isFaceDown: false }
+  ],
+  opponentSlots: [
+    { character: null, skills: [], isFaceDown: false },
+    { character: 'BBX-SP258', skills: [], isFaceDown: false, effectUsed: false },
+    { character: null, skills: [], isFaceDown: false }
+  ],
+  bench: [],
+  opponentBench: [], // Antes de sincronizar estaba vacía
+  hand: ['BBX-SP001', 'BBX-SP002', 'BBX-SP003'],
+  opponentHand: [],
+  deck: new Array(31).fill('BBX-SP004'),
+  opponentDeck: new Array(31).fill('BBX-SP001'),
+  grave: [],
+  opponentGrave: []
+};
+
+MultiplayerEngine.applyRemoteStateSync(snapshotFromPlayerA);
+
+assert(global.playtestState.opponentBench.length === 1, '7.5 La banca rival en la pantalla del oponente debe mostrar 1 personaje (1/3)');
+assert(global.playtestState.opponentBench[0].id === 'BBX-SP011', '7.6 El personaje en la banca rival debe ser Helica (BBX-SP011)');
+assert(global.playtestState.opponentHand.length === 2, '7.7 La mano rival debe reflejar las 2 cartas del jugador activo');
+assert(global.playtestState.opponentDeck.length === 28, '7.8 El mazo rival debe actualizarse a 28 cartas tras buscar en el deck');
+assert(global.playtestState.opponentGrave.length === 1 && global.playtestState.opponentGrave[0] === 'BBX-SP098', '7.9 El cementerio rival debe reflejar las cartas enviadas al cementerio');
+assert(global.playtestState.opponentSlots[1].effectUsed === true, '7.10 El estado effectUsed de Deida en campo rival debe sincronizarse');
+console.log('  ✔ PASS: 7.1 a 7.10 Sincronización espejo de Banca, Mano, Mazo, Cementerio y Campo verificada al 100%');
+
 console.log('\n======================================================');
 console.log('🎉 TODAS LAS PRUEBAS DE MULTIPLAYER ENGINE PASARON (100%)');
 console.log('======================================================\n');
