@@ -294,6 +294,91 @@ function closeDuelSetupModal() {
   if (modal) modal.classList.add('hidden');
 }
 
+/* ==========================================================================
+   SISTEMA DE MULTIJUGADOR P2P (MODAL & UI)
+   ========================================================================== */
+async function populateMultiplayerDecks() {
+  const select = document.getElementById('mp-player-deck-select');
+  if (!select) return;
+
+  select.innerHTML = '<option value="__current__">-- Mazo actual del editor --</option>';
+
+  try {
+    const res = await fetch('/api/mazos');
+    if (res.ok) {
+      const data = await res.json();
+      if (data.mazos && data.mazos.length > 0) {
+        data.mazos.forEach(m => {
+          const opt = document.createElement('option');
+          opt.value = m;
+          opt.textContent = m.replace('.json', '');
+          select.appendChild(opt);
+        });
+      }
+    }
+  } catch (err) {
+    console.warn("No se pudieron cargar mazos para multijugador:", err);
+  }
+
+  updateMultiplayerDeckStatus();
+}
+
+function updateMultiplayerDeckStatus() {
+  const select = document.getElementById('mp-player-deck-select');
+  const status = document.getElementById('mp-player-deck-status');
+  if (!status) return;
+
+  const val = select ? select.value : '__current__';
+  if (val === '__current__') {
+    const count = (typeof currentDeck !== 'undefined' && currentDeck.main) ? currentDeck.main.length : 0;
+    if (count === 35) {
+      status.innerHTML = `<span style="color: var(--accent-cyan);">✅ Válido (35/35 cartas)</span>`;
+    } else {
+      status.innerHTML = `<span style="color: var(--accent-danger);">⚠️ ${count}/35 cartas (Obligatorio 35)</span>`;
+    }
+  } else {
+    status.innerHTML = `<span style="color: var(--accent-cyan);">📁 Mazo seleccionado</span>`;
+  }
+}
+
+function onMpDeckChange() {
+  updateMultiplayerDeckStatus();
+}
+
+function openMultiplayerModal() {
+  populateMultiplayerDecks();
+  switchMultiplayerTab('create');
+  const modal = document.getElementById('multiplayer-modal');
+  if (modal) modal.classList.remove('hidden');
+}
+
+function closeMultiplayerModal() {
+  if (typeof MultiplayerEngine !== 'undefined') {
+    MultiplayerEngine.cancelRoom();
+  }
+  const modal = document.getElementById('multiplayer-modal');
+  if (modal) modal.classList.add('hidden');
+}
+
+function switchMultiplayerTab(tab) {
+  const createBtn = document.getElementById('tab-mp-create-btn');
+  const joinBtn = document.getElementById('tab-mp-join-btn');
+  const createContent = document.getElementById('mp-content-create');
+  const joinContent = document.getElementById('mp-content-join');
+
+  if (tab === 'create') {
+    if (createBtn) createBtn.classList.add('active');
+    if (joinBtn) joinBtn.classList.remove('active');
+    if (createContent) createContent.classList.remove('hidden');
+    if (joinContent) joinContent.classList.add('hidden');
+  } else {
+    if (createBtn) createBtn.classList.remove('active');
+    if (joinBtn) joinBtn.classList.add('active');
+    if (createContent) createContent.classList.add('hidden');
+    if (joinContent) joinContent.classList.remove('hidden');
+  }
+}
+
 async function confirmAndLaunchDuel() {
   const playerSelect = document.getElementById('duel-player-deck-select');
   const oppSelect = document.getElementById('duel-opp-deck-select');
@@ -58096,6 +58181,10 @@ if (typeof window !== 'undefined') {
   window.switchTab = switchTab;
   window.openDuelSetupModal = openDuelSetupModal;
   window.closeDuelSetupModal = closeDuelSetupModal;
+  window.openMultiplayerModal = openMultiplayerModal;
+  window.closeMultiplayerModal = closeMultiplayerModal;
+  window.switchMultiplayerTab = switchMultiplayerTab;
+  window.onMpDeckChange = onMpDeckChange;
   window.confirmAndLaunchDuel = confirmAndLaunchDuel;
   window.startSandboxPlaytest = startSandboxPlaytest;
   window.openRulesModal = openRulesModal;

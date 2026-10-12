@@ -55,6 +55,14 @@
             <div class="menu-card-arrow">➔</div>
           </button>
 
+          <button class="menu-card-btn menu-card-online" onclick="openMultiplayerModal()">
+            <div class="menu-card-icon">🌐</div>
+            <div class="menu-card-body">
+              <span class="menu-card-title">DUELO ONLINE (1V1)</span>
+            </div>
+            <div class="menu-card-arrow">➔</div>
+          </button>
+
           <button class="menu-card-btn menu-card-deck" onclick="showScreen('deckbuilder')">
             <div class="menu-card-icon">🃏</div>
             <div class="menu-card-body">
@@ -513,6 +521,99 @@
     </div>
   </div>
 
+  <!-- Modal de Multijugador P2P Online (Oficial Skill Blast X) -->
+  <div id="multiplayer-modal" class="modal-overlay hidden">
+    <div class="modal-content glass-panel" style="max-width: 640px;">
+      <div class="modal-header">
+        <div style="display: flex; gap: 12px; align-items: center;">
+          <h3 style="display: flex; align-items: center; gap: 8px;">🌐 Duelo Online (1v1 P2P)</h3>
+        </div>
+        <button class="modal-close" onclick="closeMultiplayerModal()">×</button>
+      </div>
+
+      <div class="modal-tabs-bar" style="display: flex; gap: 8px; padding: 12px 20px 0 20px; border-bottom: 1px solid var(--border-glass);">
+        <button id="tab-mp-create-btn" class="nav-tab active" onclick="switchMultiplayerTab('create')">🏠 Crear Sala</button>
+        <button id="tab-mp-join-btn" class="nav-tab" onclick="switchMultiplayerTab('join')">🔗 Unirse a Sala</button>
+      </div>
+
+      <div class="modal-body" style="display: flex; flex-direction: column; gap: 16px; padding: 20px;">
+        
+        <!-- Selección de Mazo Propio Compartida -->
+        <div class="setup-group">
+          <label style="font-weight: 700; color: var(--accent-cyan); display: flex; justify-content: space-between; align-items: center;">
+            <span>TU MAZO PARA EL DUELO:</span>
+            <span id="mp-player-deck-status" style="font-size: 0.8rem; font-weight: 600;">Cargando...</span>
+          </label>
+          <div style="display: flex; gap: 8px; margin-top: 6px;">
+            <select id="mp-player-deck-select" class="btn btn-secondary" style="flex: 1; text-align: left;" onchange="onMpDeckChange()">
+              <option value="__current__">-- Mazo actual del editor --</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- CONTENIDO PESTAÑA 1: CREAR SALA -->
+        <div id="mp-content-create" style="display: flex; flex-direction: column; gap: 14px;">
+          <!-- Antes de crear la sala -->
+          <div id="mp-create-initial">
+            <p style="font-size: 0.88rem; color: var(--text-muted); line-height: 1.4;">
+              Genera una sala privada. Tu juego creará un código único para que lo compartas con tu rival por Discord o WhatsApp y puedan jugar en directo sin intermediarios.
+            </p>
+            <div style="display: flex; justify-content: flex-end; margin-top: 14px;">
+              <button class="btn btn-primary" onclick="MultiplayerEngine.createRoom()" style="padding: 10px 24px; font-weight: 800; font-size: 0.95rem;">
+                🎲 ¡CREAR SALA Y GENERAR CÓDIGO!
+              </button>
+            </div>
+          </div>
+
+          <!-- Después de crear la sala (Esperando al rival) -->
+          <div id="mp-create-waiting" class="hidden" style="display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 10px 0;">
+            <div style="font-size: 0.85rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px;">
+              Comparte este código con tu amigo:
+            </div>
+            
+            <div class="room-code-badge-box" style="display: flex; align-items: center; gap: 12px; background: rgba(0, 242, 254, 0.08); border: 2px dashed var(--accent-cyan); border-radius: 12px; padding: 10px 24px;">
+              <span id="mp-room-code-display" style="font-size: 2rem; font-weight: 900; letter-spacing: 4px; font-family: monospace; color: var(--accent-cyan);">SBX-....</span>
+              <button class="btn btn-secondary" onclick="MultiplayerEngine.copyRoomCode()" style="padding: 6px 12px; font-size: 0.85rem;" title="Copiar al portapapeles">
+                📋 Copiar
+              </button>
+            </div>
+
+            <div class="mp-radar-status" style="display: flex; align-items: center; gap: 10px; color: var(--accent-cyan); font-size: 0.9rem; font-weight: 700;">
+              <span class="mp-pulse-dot"></span>
+              <span id="mp-waiting-status-text">Esperando que el rival se conecte...</span>
+            </div>
+
+            <button class="btn btn-secondary" onclick="MultiplayerEngine.cancelRoom()" style="margin-top: 4px; font-size: 0.8rem; color: var(--accent-danger);">
+              ✕ Cancelar Sala
+            </button>
+          </div>
+        </div>
+
+        <!-- CONTENIDO PESTAÑA 2: UNIRSE A SALA -->
+        <div id="mp-content-join" class="hidden" style="display: flex; flex-direction: column; gap: 14px;">
+          <p style="font-size: 0.88rem; color: var(--text-muted); line-height: 1.4;">
+            Ingresa el código que te envió tu amigo para conectarte directamente a su partida:
+          </p>
+
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <label style="font-weight: 700; font-size: 0.85rem; color: var(--text-bright);">CÓDIGO DE SALA:</label>
+            <input type="text" id="mp-join-code-input" placeholder="Ej: SBX-8492" maxlength="16" style="padding: 12px 16px; font-size: 1.2rem; font-weight: 800; font-family: monospace; text-transform: uppercase; letter-spacing: 2px; border-radius: 8px; border: 1.5px solid var(--border-glass); background: rgba(0,0,0,0.4); color: var(--accent-cyan); text-align: center;">
+          </div>
+
+          <div id="mp-join-status-area" style="font-size: 0.85rem; text-align: center; color: var(--text-muted); min-height: 20px;"></div>
+
+          <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 6px;">
+            <button class="btn btn-secondary" onclick="closeMultiplayerModal()">Cancelar</button>
+            <button id="btn-mp-join-connect" class="btn btn-primary" onclick="MultiplayerEngine.joinRoom()" style="padding: 10px 24px; font-weight: 800; font-size: 0.95rem;">
+              ⚔️ ¡CONECTARSE Y ENTRAR!
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
   <!-- Modal de Reglas y Banlist Oficial -->
   <div id="rules-banlist-modal" class="modal-overlay hidden">
     <div class="modal-content glass-panel" style="max-width: 780px; max-height: 85vh; display: flex; flex-direction: column;">
@@ -656,6 +757,10 @@
       </div>
     </div>
   </div>
+
+  <!-- Networking / P2P Multiplayer -->
+  <script src="js/peerjs.min.js?v=101"></script>
+  <script src="js/network/multiplayerEngine.js?v=101"></script>
 
   <!-- Core Modular Engine -->
   <script src="js/core/rulesEngine.js?v=101"></script>
