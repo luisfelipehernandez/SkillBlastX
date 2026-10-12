@@ -12,6 +12,16 @@ const MultiplayerEngine = (() => {
   let localDeck = null;
   let opponentDeck = null;
   let isConnected = false;
+  let setupStarted = false;
+  let localStarterChosen = false;
+  let localStarterId = null;
+  let localShuffledDeck = null;
+  let localLyna5 = false;
+  let oppStarterChosen = false;
+  let oppStarterId = null;
+  let oppShuffledDeck = null;
+  let oppLyna5 = false;
+  let coinFlipStarted = false;
 
   // Generador de código de sala limpio y legible (ej: SBX-7K9A)
   function generateRoomCode() {
@@ -69,6 +79,16 @@ const MultiplayerEngine = (() => {
     roomCode = generateRoomCode();
     isHost = true;
     isConnected = false;
+    setupStarted = false;
+    localStarterChosen = false;
+    localStarterId = null;
+    localShuffledDeck = null;
+    localLyna5 = false;
+    oppStarterChosen = false;
+    oppStarterId = null;
+    oppShuffledDeck = null;
+    oppLyna5 = false;
+    coinFlipStarted = false;
 
     // Normalizar ID para el servidor público de PeerJS (sin guiones raros)
     const peerId = `sbx_${roomCode.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
@@ -154,6 +174,16 @@ const MultiplayerEngine = (() => {
     roomCode = rawCode;
     isHost = false;
     isConnected = false;
+    setupStarted = false;
+    localStarterChosen = false;
+    localStarterId = null;
+    localShuffledDeck = null;
+    localLyna5 = false;
+    oppStarterChosen = false;
+    oppStarterId = null;
+    oppShuffledDeck = null;
+    oppLyna5 = false;
+    coinFlipStarted = false;
 
     const hostPeerId = `sbx_${rawCode.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
 
@@ -195,7 +225,7 @@ const MultiplayerEngine = (() => {
 
   // 3. EVENTOS DE LA CONEXIÓN P2P
   function setupConnectionEvents(connection) {
-    connection.on('open', () => {
+    const onOpen = () => {
       console.log("[Multiplayer] ¡Canal de datos abierto con el rival!");
       isConnected = true;
 
@@ -206,7 +236,13 @@ const MultiplayerEngine = (() => {
         name: isHost ? 'Jugador Anfitrión' : 'Jugador Rival',
         deck: localDeck
       });
-    });
+    };
+
+    if (connection.open) {
+      onOpen();
+    } else {
+      connection.on('open', onOpen);
+    }
 
     connection.on('data', (data) => {
       handleIncomingPacket(data);
@@ -240,25 +276,43 @@ const MultiplayerEngine = (() => {
           cancelRoom();
           return;
         }
-
-        if (isHost) {
-          // El Host decide quién comienza el duelo (Tirada de moneda)
-          const coinFlip = Math.random() < 0.5;
-          const hostStarts = coinFlip;
-
-          // Notificar al rival del inicio y quién arranca
-          sendPacket({
-            type: 'START_MATCH',
-            hostStarts: hostStarts
-          });
-
-          launchOnlineDuel(hostStarts);
-        }
+        beginOnlineSetup();
         break;
 
-      case 'START_MATCH':
-        // El cliente invitado recibe la orden de inicio
-        launchOnlineDuel(!packet.hostStarts);
+      case 'STARTER_CHOSEN':
+        oppStarterChosen = true;
+        oppStarterId = packet.starterId;
+        oppShuffledDeck = packet.shuffledDeck;
+        oppLyna5 = !!packet.lyna5;
+
+        if (typeof playtestState !== 'undefined') {
+          playtestState.opponentSlots[1].character = oppStarterId;
+          playtestState.opponentSlots[1].isFaceDown = true;
+          playtestState.opponentSlots[1].skills = [];
+          playtestState.opponentSlots[1].isRotated = false;
+          playtestState.opponentSlots[1].effectUsed = false;
+          playtestState.opponentDeck = [...oppShuffledDeck];
+        }
+
+        if (typeof addLog === 'function') {
+          addLog(`[Rival] Tu rival ha colocado su Personaje Inicial boca abajo en el campo.`, 'var(--accent-purple)');
+        }
+        if (typeof updatePlaytestView === 'function') updatePlaytestView();
+
+        checkBothStartersPlaced();
+        break;
+
+      case 'START_COIN_FLIP':
+        executeCoinFlip(packet.coinResult, packet.winner);
+        break;
+
+      case 'TURN_ORDER_DECIDED':
+        // El rival ganó el volado y eligió orden: 'first' (él va primero) o 'second' (él va segundo)
+        const weGoFirst = (packet.winnerOrder === 'second');
+        if (typeof addLog === 'function') {
+          addLog(`[Orden de Turno] El rival ha decidido ir <strong>${packet.winnerOrder === 'first' ? 'PRIMERO' : 'SEGUNDO'}</strong>.`, 'var(--accent-purple)');
+        }
+        finalizeMatchStart(weGoFirst);
         break;
 
       case 'ACTION_PLAY_CHARACTER':
@@ -313,53 +367,203 @@ const MultiplayerEngine = (() => {
     }
   }
 
-  // 6. LANZAR DUELO EN EL TAPETE
-  function launchOnlineDuel(weStartFirst) {
+  // 6. INICIAR PREPARACIÓN EN LÍNEA Y SELECCIÓN DE PERSONAJE INICIAL
+  function beginOnlineSetup() {
+    if (setupStarted) return;
+    setupStarted = true;
+
     // Cerrar modal de multijugador
     const modal = document.getElementById('multiplayer-modal');
     if (modal) modal.classList.add('hidden');
 
-    startOnlineMatch(localDeck, opponentDeck, weStartFirst);
-  }
-
-  // 7. INICIALIZADOR DE DUELO SINCRONIZADO
-  function startOnlineMatch(myDeckData, oppDeckData, weStartFirst) {
-    if (typeof playtestState === 'undefined') return;
-
-    playtestState.isOnlineMatch = true;
-    playtestState.isDuelVsAI = false;
-    playtestState.matchEnded = false;
-
-    // Cargar mazo local
-    playtestState.deck = [...myDeckData.main];
-    if (typeof shuffleArray === 'function') shuffleArray(playtestState.deck);
-    playtestState.hand = [];
-    playtestState.grave = [];
-    playtestState.bench = [];
-    playtestState.slots = [
-      { character: null, skills: [], usedSkills: [], usedSkillIndexes: [], maxAttacks: 1, attacksDeclared: 0, isRotated: false, effectUsed: false, muroUsadoEsteTurno: false, isFaceDown: false },
-      { character: null, skills: [], usedSkills: [], usedSkillIndexes: [], maxAttacks: 1, attacksDeclared: 0, isRotated: false, effectUsed: false, muroUsadoEsteTurno: false, isFaceDown: false },
-      { character: null, skills: [], usedSkills: [], usedSkillIndexes: [], maxAttacks: 1, attacksDeclared: 0, isRotated: false, effectUsed: false, muroUsadoEsteTurno: false, isFaceDown: false }
-    ];
-
-    // Cargar mazo rival
-    playtestState.opponentDeck = [...oppDeckData.main];
-    if (typeof shuffleArray === 'function') shuffleArray(playtestState.opponentDeck);
-    playtestState.opponentHand = [];
-    playtestState.opponentGrave = [];
-    playtestState.opponentBench = [];
-    playtestState.opponentSlots = [
-      { character: null, skills: [], usedSkills: [], usedSkillIndexes: [], maxAttacks: 1, attacksDeclared: 0, isRotated: false, effectUsed: false, muroUsadoEsteTurno: false, isFaceDown: false },
-      { character: null, skills: [], usedSkills: [], usedSkillIndexes: [], maxAttacks: 1, attacksDeclared: 0, isRotated: false, effectUsed: false, muroUsadoEsteTurno: false, isFaceDown: false },
-      { character: null, skills: [], usedSkills: [], usedSkillIndexes: [], maxAttacks: 1, attacksDeclared: 0, isRotated: false, effectUsed: false, muroUsadoEsteTurno: false, isFaceDown: false }
-    ];
-
-    playtestState.turnCount = 1;
-    playtestState.turnOwner = weStartFirst ? 'player' : 'opponent';
-
     if (typeof showScreen === 'function') {
       showScreen('playtest');
     }
+
+    if (typeof playtestState !== 'undefined') {
+      playtestState.isOnlineMatch = true;
+      playtestState.isDuelVsAI = false;
+      playtestState.matchEnded = false;
+      playtestState.turnCount = 1;
+      playtestState.turnOwner = null;
+      playtestState.hand = [];
+      playtestState.grave = [];
+      playtestState.bench = [];
+      playtestState.opponentHand = [];
+      playtestState.opponentGrave = [];
+      playtestState.opponentBench = [];
+      playtestState.deck = [...localDeck.main];
+      playtestState.opponentDeck = [...opponentDeck.main];
+      playtestState.slots = [
+        { character: null, skills: [], usedSkills: [], usedSkillIndexes: [], maxAttacks: 1, attacksDeclared: 0, isRotated: false, effectUsed: false, muroUsadoEsteTurno: false, isFaceDown: false },
+        { character: null, skills: [], usedSkills: [], usedSkillIndexes: [], maxAttacks: 1, attacksDeclared: 0, isRotated: false, effectUsed: false, muroUsadoEsteTurno: false, isFaceDown: false },
+        { character: null, skills: [], usedSkills: [], usedSkillIndexes: [], maxAttacks: 1, attacksDeclared: 0, isRotated: false, effectUsed: false, muroUsadoEsteTurno: false, isFaceDown: false }
+      ];
+      playtestState.opponentSlots = [
+        { character: null, skills: [], usedSkills: [], usedSkillIndexes: [], maxAttacks: 1, attacksDeclared: 0, isRotated: false, effectUsed: false, muroUsadoEsteTurno: false, isFaceDown: false },
+        { character: null, skills: [], usedSkills: [], usedSkillIndexes: [], maxAttacks: 1, attacksDeclared: 0, isRotated: false, effectUsed: false, muroUsadoEsteTurno: false, isFaceDown: false },
+        { character: null, skills: [], usedSkills: [], usedSkillIndexes: [], maxAttacks: 1, attacksDeclared: 0, isRotated: false, effectUsed: false, muroUsadoEsteTurno: false, isFaceDown: false }
+      ];
+    }
+
+    if (typeof addLog === 'function') {
+      addLog(`🌐 [Multijugador P2P] ¡Conexión establecida con éxito con el rival!`, 'var(--accent-cyan)');
+      addLog(`🎴 Por favor elige tu Personaje Inicial de tu mazo...`, 'var(--accent-cyan)');
+    }
+
+    if (typeof updatePlaytestView === 'function') updatePlaytestView();
+
+    // Obtener personajes básicos de tu mazo para el selector
+    const basicCharacters = localDeck.main.filter(id => {
+      const c = (typeof cardsDatabase !== 'undefined') ? cardsDatabase[id] : null;
+      return c && c.tipo === 'Personaje' && c.clase !== 'Avanzada';
+    });
+
+    const candidates = basicCharacters.length > 0 ? basicCharacters : [localDeck.main[0]];
+
+    if (typeof openStarterSelector === 'function') {
+      openStarterSelector(candidates, (selectedId) => {
+        handleLocalStarterSelected(selectedId);
+      });
+    }
+  }
+
+  // 7. MANEJO DE SELECCIÓN DE PERSONAJE INICIAL LOCAL
+  function handleLocalStarterSelected(selectedId) {
+    localStarterChosen = true;
+    localStarterId = selectedId;
+
+    // Colocar personaje inicial local BOCA ABAJO en Slot 1 (centro)
+    if (typeof playtestState !== 'undefined') {
+      playtestState.slots[1].character = selectedId;
+      playtestState.slots[1].isFaceDown = true;
+      playtestState.slots[1].skills = [];
+      playtestState.slots[1].isRotated = false;
+      playtestState.slots[1].effectUsed = false;
+
+      // Remover del mazo y barajar el resto
+      const remaining = [...localDeck.main];
+      const sIdx = remaining.indexOf(selectedId);
+      if (sIdx !== -1) remaining.splice(sIdx, 1);
+      if (typeof shuffleArray === 'function') shuffleArray(remaining);
+      localShuffledDeck = remaining;
+      playtestState.deck = [...localShuffledDeck];
+    }
+
+    if (typeof updatePlaytestView === 'function') updatePlaytestView();
+
+    const proceedSendStarter = (wants5) => {
+      localLyna5 = wants5;
+      sendPacket({
+        type: 'STARTER_CHOSEN',
+        starterId: localStarterId,
+        shuffledDeck: localShuffledDeck,
+        lyna5: localLyna5
+      });
+
+      if (typeof addLog === 'function') {
+        addLog(`Has colocado tu Personaje Inicial boca abajo en el campo. Esperando al rival...`, 'var(--accent-cyan)');
+      }
+
+      checkBothStartersPlaced();
+    };
+
+    if (selectedId === 'BBX-SP403') {
+      if (typeof openLynaStarterChoiceModal === 'function') {
+        openLynaStarterChoiceModal((wants5) => {
+          proceedSendStarter(wants5);
+        });
+      } else if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
+        const wants5 = window.confirm("¿Deseas activar el efecto de Lyna (BBX-SP403) para comenzar la partida con 5 cartas en tu mano en lugar de 3?");
+        proceedSendStarter(wants5);
+      } else {
+        proceedSendStarter(true);
+      }
+    } else {
+      proceedSendStarter(false);
+    }
+  }
+
+  // 8. VERIFICAR SI AMBOS PERSONAJES INICIALES ESTÁN COLOCADOS
+  function checkBothStartersPlaced() {
+    if (!localStarterChosen || !oppStarterChosen) return;
+
+    if (typeof addLog === 'function') {
+      addLog(`[Inicio del Duelo] Ambos jugadores han colocado su Personaje Inicial boca abajo en el campo.`, 'var(--accent-cyan)');
+    }
+    if (typeof updatePlaytestView === 'function') updatePlaytestView();
+
+    if (isHost && !coinFlipStarted) {
+      coinFlipStarted = true;
+      setTimeout(() => {
+        const coinResult = Math.random() < 0.5 ? 'cara' : 'sello';
+        // 'cara' => Host gana volado, 'sello' => Guest gana volado
+        const winner = (coinResult === 'cara') ? 'host' : 'guest';
+
+        sendPacket({
+          type: 'START_COIN_FLIP',
+          coinResult: coinResult,
+          winner: winner
+        });
+
+        executeCoinFlip(coinResult, winner);
+      }, 700);
+    }
+  }
+
+  // 9. LANZAMIENTO DE MONEDA 3D SINCRONIZADO
+  function executeCoinFlip(coinResult, winner) {
+    if (typeof addLog === 'function') {
+      addLog(`[Lanzamiento de Moneda] Lanzando moneda 3D compartida para determinar quién elige el orden de turno...`, 'var(--accent-cyan)');
+    }
+
+    const onCoinFinished = (res) => {
+      const iWon = (isHost && winner === 'host') || (!isHost && winner === 'guest');
+
+      if (iWon) {
+        if (typeof addLog === 'function') {
+          addLog(`👑 ¡Has obtenido ${res.toUpperCase()} y ganado el volado! Elige si deseas ir Primero o Segundo.`, 'var(--accent-cyan)');
+        }
+
+        if (typeof openTurnOrderChoiceModal === 'function') {
+          openTurnOrderChoiceModal((order) => {
+            // order es 'first' o 'second'
+            sendPacket({
+              type: 'TURN_ORDER_DECIDED',
+              winnerOrder: order
+            });
+            if (typeof addLog === 'function') {
+              addLog(`[Orden de Turno] Has decidido ir <strong>${order === 'first' ? 'PRIMERO' : 'SEGUNDO'}</strong>.`, 'var(--accent-cyan)');
+            }
+            finalizeMatchStart(order === 'first');
+          });
+        } else {
+          sendPacket({
+            type: 'TURN_ORDER_DECIDED',
+            winnerOrder: 'first'
+          });
+          finalizeMatchStart(true);
+        }
+      } else {
+        if (typeof addLog === 'function') {
+          addLog(`👑 Tu rival ha obtenido ${res.toUpperCase()} y ganado el volado. Esperando que elija quién comienza...`, 'var(--accent-purple)');
+        }
+      }
+    };
+
+    if (typeof flipCoin === 'function') {
+      flipCoin(onCoinFinished, coinResult);
+    } else {
+      onCoinFinished(coinResult);
+    }
+  }
+
+  // 10. FINALIZAR INICIO DE DUELO Y REPARTIR CARTAS
+  function finalizeMatchStart(weStartFirst) {
+    if (typeof playtestState === 'undefined') return;
+
+    playtestState.turnCount = 1;
+    playtestState.turnOwner = weStartFirst ? 'player' : 'opponent';
 
     const btn = document.getElementById('btn-toggle-turn');
     if (btn) {
@@ -367,33 +571,44 @@ const MultiplayerEngine = (() => {
       btn.style.borderColor = weStartFirst ? "var(--accent-cyan)" : "var(--accent-purple)";
       btn.style.color = weStartFirst ? "var(--accent-cyan)" : "var(--accent-purple)";
     }
+    if (typeof updateTurnBadgeUI === 'function') updateTurnBadgeUI();
 
-    // Auto-colocar personaje inicial en Slot 1 (centro)
-    const misPersonajes = playtestState.deck.filter(id => cardsDatabase[id] && cardsDatabase[id].tipo === 'Personaje' && cardsDatabase[id].clase !== 'Avanzada');
-    const starterLocal = misPersonajes.length > 0 ? misPersonajes[0] : playtestState.deck[0];
-
-    const oppPersonajes = playtestState.opponentDeck.filter(id => cardsDatabase[id] && cardsDatabase[id].tipo === 'Personaje' && cardsDatabase[id].clase !== 'Avanzada');
-    const starterOpp = oppPersonajes.length > 0 ? oppPersonajes[0] : playtestState.opponentDeck[0];
-
-    playtestState.slots[1].character = starterLocal;
+    // Voltear personajes iniciales boca arriba
     playtestState.slots[1].isFaceDown = false;
-    const pIdx = playtestState.deck.indexOf(starterLocal);
-    if (pIdx !== -1) playtestState.deck.splice(pIdx, 1);
-
-    playtestState.opponentSlots[1].character = starterOpp;
     playtestState.opponentSlots[1].isFaceDown = false;
-    const oIdx = playtestState.opponentDeck.indexOf(starterOpp);
-    if (oIdx !== -1) playtestState.opponentDeck.splice(oIdx, 1);
 
-    // Mano inicial reglamentaria: 3 cartas para cada uno
-    for (let i = 0; i < 3; i++) {
-      if (playtestState.deck.length > 0) playtestState.hand.push(playtestState.deck.pop());
-      if (playtestState.opponentDeck.length > 0) playtestState.opponentHand.push(playtestState.opponentDeck.pop());
+    const myCard = (typeof cardsDatabase !== 'undefined') ? cardsDatabase[localStarterId] : null;
+    const oppCard = (typeof cardsDatabase !== 'undefined') ? cardsDatabase[oppStarterId] : null;
+    const myName = myCard ? myCard.nombre : localStarterId;
+    const oppName = oppCard ? oppCard.nombre : oppStarterId;
+
+    if (typeof addLog === 'function') {
+      addLog(`[Personajes Revelados] ¡Se voltean los Personajes Iniciales! Jugador: <strong>${myName}</strong> | Oponente: <strong>${oppName}</strong>.`, 'var(--accent-cyan)');
+    }
+
+    // Mano inicial reglamentaria: 3 cartas (o 5 si Lyna activada)
+    const myHandCount = (localStarterId === 'BBX-SP403' && localLyna5) ? 5 : 3;
+    const oppHandCount = (oppStarterId === 'BBX-SP403' && oppLyna5) ? 5 : 3;
+
+    for (let i = 0; i < myHandCount; i++) {
+      if (playtestState.deck.length > 0) {
+        playtestState.hand.push(playtestState.deck.shift());
+      }
+    }
+    for (let i = 0; i < oppHandCount; i++) {
+      if (playtestState.opponentDeck.length > 0) {
+        playtestState.opponentHand.push(playtestState.opponentDeck.shift());
+      }
     }
 
     if (typeof addLog === 'function') {
-      addLog(`🌐 [Multijugador P2P] ¡Conexión establecida con éxito con el rival!`, 'var(--accent-cyan)');
+      addLog(`Robaste <strong>${myHandCount} cartas</strong> de mano inicial.`);
+      addLog(`Tu rival robó <strong>${oppHandCount} cartas</strong> de mano inicial.`);
       addLog(`⚔️ ¡Comienza el Duelo Online! ${weStartFirst ? 'Tú comienzas el Turno 1' : 'Tu rival comienza el Turno 1'}.`, 'var(--accent-cyan)');
+    }
+
+    if (typeof window !== 'undefined' && window.AnimationEngine && typeof window.AnimationEngine.showPhaseBanner === 'function') {
+      window.AnimationEngine.showPhaseBanner(weStartFirst ? "TURNO 1: TU TURNO" : "TURNO 1: TURNO RIVAL");
     }
 
     if (typeof updatePlaytestView === 'function') updatePlaytestView();
@@ -525,7 +740,7 @@ const MultiplayerEngine = (() => {
   function executeRemoteDrawCard() {
     if (typeof playtestState === 'undefined') return;
     if (playtestState.opponentDeck && playtestState.opponentDeck.length > 0) {
-      const cardId = playtestState.opponentDeck.pop();
+      const cardId = playtestState.opponentDeck.shift();
       if (!playtestState.opponentHand) playtestState.opponentHand = [];
       playtestState.opponentHand.push(cardId);
 
@@ -614,6 +829,16 @@ const MultiplayerEngine = (() => {
     roomCode = null;
     isConnected = false;
     isHost = false;
+    setupStarted = false;
+    localStarterChosen = false;
+    localStarterId = null;
+    localShuffledDeck = null;
+    localLyna5 = false;
+    oppStarterChosen = false;
+    oppStarterId = null;
+    oppShuffledDeck = null;
+    oppLyna5 = false;
+    coinFlipStarted = false;
 
     const initialView = document.getElementById('mp-create-initial');
     const waitingView = document.getElementById('mp-create-waiting');

@@ -87,6 +87,79 @@ assert.doesNotThrow(() => {
 }, '5.1 sendPacket sin conexión activa no debe lanzar excepciones');
 console.log('  ✔ PASS: 5.1 Envío seguro tolerante ante caídas o desconexiones');
 
+// 8. Validación de Guardias de Seguridad en app.js para Duelos Online
+console.log('\n--- SECCIÓN 6: Guardias de Seguridad y Niebla de Guerra (app.js) ---');
+global.alert = (msg) => {}; // Mock alert
+
+// Simular estado de duelo online
+global.playtestState = {
+  isOnlineMatch: true,
+  turnOwner: 'opponent',
+  slots: [
+    { character: null, skills: [], isFaceDown: false },
+    { character: 'BBX-SP001', skills: [], isFaceDown: true },
+    { character: null, skills: [], isFaceDown: false }
+  ],
+  opponentSlots: [
+    { character: null, skills: [], isFaceDown: false },
+    { character: 'BBX-SP001', skills: [], isFaceDown: true },
+    { character: null, skills: [], isFaceDown: false }
+  ],
+  hand: ['BBX-SP001', 'BBX-SP008'],
+  opponentHand: ['BBX-SP001', 'BBX-SP008'],
+  deck: ['BBX-SP001', 'BBX-SP002', 'BBX-SP003'],
+  opponentDeck: ['BBX-SP004', 'BBX-SP005', 'BBX-SP006']
+};
+global.cardsDatabase = {
+  'BBX-SP001': { id: 'BBX-SP001', nombre: 'Haruka', tipo: 'Personaje', clase: 'Básica' },
+  'BBX-SP002': { id: 'BBX-SP002', nombre: 'Muro', tipo: 'Skill' },
+  'BBX-SP003': { id: 'BBX-SP003', nombre: 'Espada', tipo: 'Skill' },
+  'BBX-SP004': { id: 'BBX-SP004', nombre: 'Lyna', tipo: 'Personaje', clase: 'Básica' },
+  'BBX-SP005': { id: 'BBX-SP005', nombre: 'Escudo', tipo: 'Skill' },
+  'BBX-SP006': { id: 'BBX-SP006', nombre: 'Fuego', tipo: 'Skill' },
+  'BBX-SP008': { id: 'BBX-SP008', nombre: 'Voluntad', tipo: 'Skill' }
+};
+
+// Cargar funciones de app.js requeridas
+const appCode = fs.readFileSync(path.join(__dirname, 'app.js'), 'utf8');
+
+// Extraer playerDeckClick
+assert(appCode.includes('function playerDeckClick()'), '6.1 playerDeckClick debe existir');
+const initialDeckCount = global.playtestState.deck.length;
+// Ejecutar función de guardia de clic en mazo propio
+eval(appCode.match(/function playerDeckClick\(\)[\s\S]*?\n\}/)[0]);
+playerDeckClick();
+assert(global.playtestState.deck.length === initialDeckCount, '6.1 playerDeckClick no debe robar cartas en duelo online');
+console.log('  ✔ PASS: 6.1 playerDeckClick bloquea el robo manual durante partidas online');
+
+// Extraer opponentDrawCard
+const initialOppDeckCount = global.playtestState.opponentDeck.length;
+eval(appCode.match(/function opponentDrawCard\([\s\S]*?\n\}/)[0]);
+opponentDrawCard();
+assert(global.playtestState.opponentDeck.length === initialOppDeckCount, '6.2 opponentDrawCard no debe alterar mazo rival');
+console.log('  ✔ PASS: 6.2 opponentDrawCard bloquea interacción con el mazo del oponente');
+
+// Extraer invokeCharacter y validar bloqueo fuera de turno
+const initialSlot0 = global.playtestState.slots[0].character;
+eval(appCode.match(/function invokeCharacter\(cardId, handIndex, slotIndex\)[\s\S]*?\n\}/)[0]);
+const invokeRes = invokeCharacter('BBX-SP001', 0, 0);
+assert(invokeRes === false && global.playtestState.slots[0].character === initialSlot0, '6.3 invokeCharacter debe bloquearse fuera de turno');
+console.log('  ✔ PASS: 6.3 invokeCharacter bloquea invocaciones en el turno del rival');
+
+// Extraer equipSkill y validar bloqueo fuera de turno
+const initialSkills = [...global.playtestState.slots[1].skills];
+eval(appCode.match(/function equipSkill\(cardId, handIndex, slotIndex\)[\s\S]*?\n\}/)[0]);
+equipSkill('BBX-SP008', 1, 1);
+assert(global.playtestState.slots[1].skills.length === initialSkills.length, '6.4 equipSkill debe bloquearse fuera de turno');
+console.log('  ✔ PASS: 6.4 equipSkill bloquea equipar habilidades en el turno del rival');
+
+// Extraer toggleTurnOwner y validar bloqueo manual
+eval(appCode.match(/function toggleTurnOwner\(\)[\s\S]*?\n\}/)[0]);
+toggleTurnOwner();
+assert(global.playtestState.turnOwner === 'opponent', '6.5 toggleTurnOwner no debe cambiar de turno manualmente en online');
+console.log('  ✔ PASS: 6.5 toggleTurnOwner bloquea alternar turnos manualmente en online');
+
 console.log('\n======================================================');
 console.log('🎉 TODAS LAS PRUEBAS DE MULTIPLAYER ENGINE PASARON (100%)');
 console.log('======================================================\n');
+

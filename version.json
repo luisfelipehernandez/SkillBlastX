@@ -1,9 +1,9 @@
 {
-  "version": "1.1.0",
-  "version_code": 3,
+  "version": "1.1.1",
+  "version_code": 4,
   "release_date": "2026-10-12",
   "name": "Skill Blast X",
-  "description": "Modo Multijugador Online P2P (1v1), 429 cartas oficiales e IA competitiva",
+  "description": "Modo Multijugador Online P2P (1v1) con inicio reglamentario, volado sincronizado y protección de turnos",
   "repo_url": "https://github.com/luisfelipehernandez/SkillBlastX",
   "raw_base_url": "https://raw.githubusercontent.com/luisfelipehernandez/SkillBlastX/main/"
 }

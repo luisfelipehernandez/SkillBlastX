@@ -1316,7 +1316,19 @@ function loadOpponentDeckToPlaytest() {
   }
 }
 
+function playerDeckClick() {
+  if (playtestState.isOnlineMatch) {
+    alert("En duelos online, el robo de carta es automático al inicio de tu turno o mediante efectos de cartas.");
+    return;
+  }
+  drawCard();
+}
+
 function opponentDrawCard(sourceType) {
+  if (playtestState.isOnlineMatch) {
+    alert("No puedes manipular el mazo de tu oponente.");
+    return;
+  }
   if (sourceType === 'character' && isDrawByCharacterBlocked('opponent')) {
     addLog(`[Efecto Continuo] Se bloqueó el robo de carta del oponente por efecto de Personaje (Helica SP135 o Nara BBX-SP252).`, 'var(--accent-purple)');
     return;
@@ -1893,7 +1905,7 @@ function startMatchSequence(chosenPlayerStarterId, testOptions = {}, onDone = nu
 }
 
 // Seleccionar personaje inicial
-function openStarterSelector(personajeIds) {
+function openStarterSelector(personajeIds, onSelectCallback = null) {
   const grid = document.getElementById('starter-cards-grid');
   grid.innerHTML = '';
 
@@ -1905,13 +1917,20 @@ function openStarterSelector(personajeIds) {
     div.innerHTML = `<img src="/imagenes/${card.imagen}" alt="${card.nombre}">`;
     
     div.addEventListener('click', () => {
-      startMatchSequence(id);
+      const modal = document.getElementById('starter-modal');
+      if (modal) modal.classList.add('hidden');
+      if (typeof onSelectCallback === 'function') {
+        onSelectCallback(id);
+      } else {
+        startMatchSequence(id);
+      }
     });
 
     grid.appendChild(div);
   });
 
-  document.getElementById('starter-modal').classList.remove('hidden');
+  const modal = document.getElementById('starter-modal');
+  if (modal) modal.classList.remove('hidden');
 }
 
 function shuffleArray(array) {
@@ -2308,6 +2327,10 @@ function startNewTurn() {
 }
 
 function toggleTurnOwner() {
+  if (playtestState.isOnlineMatch) {
+    alert("En duelos online, el turno finaliza únicamente usando el botón 'TERMINAR TURNO'.");
+    return;
+  }
   const previousOwner = playtestState.turnOwner;
 
   // Trigger de fin de turno para ¡Rencor! (BBX-SP068)
@@ -5888,6 +5911,10 @@ function updatePlaytestView() {
     } else {
       cardEl.draggable = true;
       cardEl.addEventListener('dragstart', (e) => {
+        if (playtestState.isOnlineMatch && playtestState.turnOwner !== 'player') {
+          e.preventDefault();
+          return;
+        }
         e.dataTransfer.setData('text/plain', JSON.stringify({ source: 'hand', id: id, index: index }));
       });
       
@@ -5900,7 +5927,7 @@ function updatePlaytestView() {
     handContainer.appendChild(cardEl);
   });
 
-  // Mano Oponente (Boca abajo)
+  // Mano Oponente (Boca abajo en duelos online e IA)
   const oppHandContainer = document.getElementById('playtest-opp-hand');
   if (oppHandContainer) {
     oppHandContainer.innerHTML = '';
@@ -5909,22 +5936,24 @@ function updatePlaytestView() {
       cardEl.className = 'hand-card';
       cardEl.id = `opp-hand-card-${index}`;
       const cardObj = cardsDatabase[id];
-      if (!playtestState.isDuelVsAI && cardObj) {
+      if (!playtestState.isDuelVsAI && !playtestState.isOnlineMatch && cardObj) {
         cardEl.innerHTML = `<img src="/imagenes/${cardObj.imagen}" alt="${cardObj.nombre}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 4px; border: 1px solid rgba(255, 60, 60, 0.45);">`;
       } else {
         cardEl.innerHTML = `<img src="/imagenes/reverso.jpg" alt="Carta Rival" class="card-back-img" style="border: 1px solid rgba(255, 60, 60, 0.35);">`;
       }
       
-      attachCardHover(cardEl, id);
-      cardEl.draggable = true;
-      cardEl.addEventListener('dragstart', (e) => {
-        e.dataTransfer.setData('text/plain', JSON.stringify({ source: 'opp-hand', id: id, index: index }));
-      });
+      if (!playtestState.isOnlineMatch) {
+        attachCardHover(cardEl, id);
+        cardEl.draggable = true;
+        cardEl.addEventListener('dragstart', (e) => {
+          e.dataTransfer.setData('text/plain', JSON.stringify({ source: 'opp-hand', id: id, index: index }));
+        });
 
-      cardEl.addEventListener('click', (e) => {
-        e.stopPropagation();
-        showOpponentHandCardMenu(e, id, index);
-      });
+        cardEl.addEventListener('click', (e) => {
+          e.stopPropagation();
+          showOpponentHandCardMenu(e, id, index);
+        });
+      }
 
       oppHandContainer.appendChild(cardEl);
     });
@@ -6345,6 +6374,7 @@ function handleDropOnBench(e) {
 // Funciones del Oponente: Drag & Drop
 function handleDropOnOpponentSlot(e, slotIndex) {
   e.preventDefault();
+  if (playtestState.isOnlineMatch) return;
   e.currentTarget.classList.remove('drag-over');
   
   const data = JSON.parse(e.dataTransfer.getData('text/plain'));
@@ -6814,6 +6844,7 @@ function showContextMenu(e, items) {
 }
 function showOpponentHandCardMenu(e, id, index) {
   e.preventDefault();
+  if (playtestState.isOnlineMatch) return;
   const card = cardsDatabase[id];
   if (playtestState.isDuelVsAI) {
     if (typeof showCardDetail === 'function') showCardDetail(card);
@@ -8792,6 +8823,7 @@ if (typeof global !== 'undefined') {
 
 function showOpponentFieldCardMenu(e, slotIndex) {
   e.preventDefault();
+  if (playtestState.isOnlineMatch) return;
   const slot = playtestState.opponentSlots[slotIndex];
   if (!slot || !slot.character) return;
   if (slot.isFaceDown) {
@@ -9146,6 +9178,18 @@ function showOpponentFieldCardMenu(e, slotIndex) {
 function showOpponentEquippedSkillMenu(e, slotIndex, skId, skIndex) {
   e.preventDefault();
   const card = cardsDatabase[skId];
+  if (playtestState.isOnlineMatch) {
+    if (typeof showCardDetail === 'function') showCardDetail(card);
+    const items = [
+      {
+        text: `🛡️ ${card.nombre} (Skill Rival - Partida Online)`,
+        disabled: true,
+        action: () => {}
+      }
+    ];
+    showContextMenu(e, items);
+    return;
+  }
   if (playtestState.isDuelVsAI) {
     if (typeof showCardDetail === 'function') showCardDetail(card);
     const items = [
@@ -18376,6 +18420,10 @@ function showEquippedSkillMenu(e, slotIndex, skId, skIndex) {
 /* ==================== EJECUCIÓN DE ACCIONES ==================== */
 
 function invokeCharacter(cardId, handIndex, slotIndex) {
+  if (playtestState.isOnlineMatch && playtestState.turnOwner !== 'player') {
+    alert("No es tu turno para invocar personajes.");
+    return false;
+  }
   const invocadaDesdeMano = (handIndex !== undefined && handIndex !== -1);
   if (invocadaDesdeMano && typeof isCharacterPlayBlockedToField === 'function' && isCharacterPlayBlockedToField(cardId, 'player')) {
     const cardName = cardsDatabase[cardId] ? cardsDatabase[cardId].nombre : cardId;
@@ -20971,6 +21019,10 @@ window.isSkillBlockedByProximoDestino = isSkillBlockedByProximoDestino;
 window.registerSkillActivation = registerSkillActivation;
 
 function equipSkill(cardId, handIndex, slotIndex) {
+  if (playtestState.isOnlineMatch && playtestState.turnOwner !== 'player') {
+    alert("No es tu turno para equipar habilidades.");
+    return;
+  }
   const card = cardsDatabase[cardId];
   const slot = playtestState.slots[slotIndex];
   
@@ -38921,15 +38973,16 @@ function rollDice(onFinish) {
 }
 
 // Lanzar moneda (Cara o Sello) con animación 3D
-function flipCoin(onFinish) {
+function flipCoin(onFinish, forcedResult = null) {
   const overlay = document.getElementById('coin-overlay');
   const title = document.getElementById('coin-title-text');
   const throwContainer = document.getElementById('coin-throw-container');
   const disc = document.getElementById('coin-disc');
 
+  const isCara = forcedResult ? (forcedResult === 'cara') : (Math.random() < 0.5);
+  const result = isCara ? 'cara' : 'sello';
+
   if (!overlay || !disc) {
-    const isCara = Math.random() < 0.5;
-    const result = isCara ? 'cara' : 'sello';
     if (onFinish) onFinish(result);
     return;
   }
@@ -38943,9 +38996,6 @@ function flipCoin(onFinish) {
   throwContainer.style.animation = '';
 
   overlay.classList.add('show');
-
-  const isCara = Math.random() < 0.5;
-  const result = isCara ? 'cara' : 'sello';
 
   setTimeout(() => {
     disc.classList.remove('flipping');
@@ -53596,6 +53646,17 @@ function openUpToMultiCardChooserModal(cardIds, title, maxQty, onConfirm) {
 }
 
 function showOpponentDeckContextMenu(e) {
+  if (playtestState.isOnlineMatch) {
+    const items = [
+      {
+        text: `🛡️ Mazo Rival (${playtestState.opponentDeck.length} cartas) - Partida Online`,
+        disabled: true,
+        action: () => {}
+      }
+    ];
+    showContextMenu(e, items);
+    return;
+  }
   if (playtestState.isDuelVsAI) {
     const items = [
       {
@@ -53675,6 +53736,17 @@ function showOpponentDeckContextMenu(e) {
 }
 
 function showPlayerDeckContextMenu(e) {
+  if (playtestState.isOnlineMatch) {
+    const items = [
+      {
+        text: `🛡️ Mazo (${playtestState.deck.length} cartas) - Partida Online`,
+        disabled: true,
+        action: () => {}
+      }
+    ];
+    showContextMenu(e, items);
+    return;
+  }
   const items = [
     {
       text: "🔍 Buscar en tu mazo",
