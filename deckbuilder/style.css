@@ -704,7 +704,7 @@ body {
 /* Carta en Juego */
 .in-game-card {
   position: relative;
-  width: 100px;
+  width: 96px;
   aspect-ratio: 675/975;
   border-radius: 6px;
   overflow: visible;
@@ -732,19 +732,20 @@ body {
   display: flex;
   gap: 4px;
   position: absolute;
-  bottom: -30px;
+  bottom: -10px;
   width: 100%;
   justify-content: center;
-  z-index: 3;
+  z-index: 25;
 }
 
 .equipped-skill {
-  width: 40px;
+  width: 36px;
   aspect-ratio: 675/975;
   border-radius: 4px;
   border: 1px solid var(--border-glass);
   overflow: hidden;
   cursor: pointer;
+  box-shadow: 0 3px 10px rgba(0,0,0,0.8);
   transition: var(--transition-smooth);
 }
 
@@ -1171,12 +1172,13 @@ body {
 
 /* ==================== DISEÑO DEL TAPETE (BOCETO USUARIO) ==================== */
 
-/* Forzar que la pestaña de playtest nunca desborde verticalmente el alto de la ventana */
+/* Forzar que la pestaña de playtest ocupe la pantalla completa limpia sin desbordar */
 #section-playtest.tab-content {
-  height: calc(100vh - 60px) !important;
+  height: 100vh !important;
+  max-height: 100vh !important;
   overflow: hidden !important;
   display: none;
-  padding: 16px;
+  padding: 8px 12px;
   box-sizing: border-box;
 }
 
@@ -1586,27 +1588,29 @@ body {
   align-items: center;
   justify-content: center;
   perspective: 1200px;
-  perspective-origin: 50% 40%;
-  padding: 6px;
+  perspective-origin: 50% 50%;
+  padding: 6px 12px;
   min-height: 0;
   box-sizing: border-box;
-  overflow: visible;
+  overflow: hidden;
 }
 
 .playtest-mat {
-  width: 98%;
-  height: 98%;
-  padding: 10px 16px;
-  transform: rotateX(8deg);
+  width: 100%;
+  max-width: 1100px;
+  height: 100%;
+  padding: 14px 20px;
+  transform: rotateX(2deg);
   transform-style: preserve-3d;
-  background: rgba(8, 14, 26, 0.55);
-  border: 1.5px solid rgba(0, 242, 254, 0.2);
+  background: rgba(8, 14, 26, 0.6);
+  border: 1.5px solid rgba(0, 242, 254, 0.25);
   border-radius: 14px;
   box-shadow: inset 0 0 50px rgba(0, 0, 0, 0.9), 0 10px 30px rgba(0, 0, 0, 0.5);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   box-sizing: border-box;
+  position: relative;
 }
 
 /* Línea divisoria central de combate */
@@ -1614,9 +1618,10 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 16px;
-  margin: 6px 0;
-  opacity: 0.7;
+  gap: 14px;
+  margin: 4px 0;
+  opacity: 0.75;
+  flex-shrink: 0;
 }
 
 .divider-line {
@@ -1638,8 +1643,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 6px 16px 8px 16px;
-  min-height: 85px;
+  padding: 4px 16px 6px 16px;
+  min-height: 80px;
   background: linear-gradient(0deg, rgba(6, 10, 18, 0.95) 0%, rgba(6, 10, 18, 0.6) 80%, transparent 100%);
   z-index: 30;
   box-sizing: border-box;
@@ -1651,7 +1656,7 @@ body {
   align-items: center;
   justify-content: center;
   overflow: visible !important;
-  padding: 6px 0;
+  padding: 4px 0;
 }
 
 .player-hand-strip .hand-card {
@@ -1666,7 +1671,7 @@ body {
 }
 
 .player-hand-strip .hand-card:hover {
-  transform: translateY(-26px) scale(1.3) !important;
+  transform: translateY(-24px) scale(1.3) !important;
   z-index: 100 !important;
   border-color: var(--accent-cyan) !important;
   box-shadow: 0 12px 30px rgba(0, 242, 254, 0.5), 0 0 15px rgba(0, 242, 254, 0.8) !important;
@@ -1677,11 +1682,15 @@ body {
   width: 100%;
   box-sizing: border-box;
   transform-style: preserve-3d;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
 }
 
 /* Fila del Campo del Oponente */
 .opponent-row {
-  margin-bottom: 24px;
+  margin-bottom: 0;
 }
 
 /* Estilo de los slots del oponente (tonos rojizos) */
@@ -1725,8 +1734,6 @@ body {
   background: rgba(20, 10, 25, 0.25) !important;
 }
 
-
-
 .opponent-hand-mini .hand-card {
   cursor: default !important;
 }
@@ -1741,19 +1748,20 @@ body {
   display: flex;
   gap: 4px;
   position: absolute;
-  bottom: -30px;
+  bottom: -10px;
   width: 100%;
   justify-content: center;
-  z-index: 3;
+  z-index: 25;
 }
 
 .equipped-skill {
-  width: 40px;
+  width: 36px;
   aspect-ratio: 675/975;
   border-radius: 4px;
   border: 1px solid var(--border-glass);
   overflow: hidden;
   cursor: pointer;
+  box-shadow: 0 3px 10px rgba(0,0,0,0.8);
   transition: var(--transition-smooth);
 }
 
@@ -1773,23 +1781,24 @@ body {
 .mat-upper-row {
   display: flex;
   flex-direction: row;
-  height: 48%;
-  gap: 16px;
+  height: 100%;
+  gap: 14px;
   width: 100%;
   box-sizing: border-box;
-  align-items: stretch;
+  align-items: center;
 }
 
 /* Zona Banca */
 .mat-zone-banca {
-  width: 200px;
+  width: 175px;
+  height: 148px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
   border: 1px dashed rgba(155, 81, 224, 0.4);
-  border-radius: 12px;
+  border-radius: 10px;
   background: rgba(0, 0, 0, 0.25);
-  padding: 8px;
+  padding: 6px;
   box-sizing: border-box;
   justify-content: center;
   align-items: center;
@@ -1812,7 +1821,7 @@ body {
 
 /* Tarjetas de Banca: Estable, sin saltos bruscos y con respuesta táctil sólida */
 .bench-card {
-  width: 70px;
+  width: 66px;
   aspect-ratio: 675/975;
   border-radius: 6px;
   border: 1.5px solid rgba(155, 81, 224, 0.5);
@@ -1865,17 +1874,17 @@ body {
   flex: 1;
   display: flex;
   flex-direction: row;
-  gap: 20px;
+  gap: 16px;
   justify-content: center;
   align-items: center;
   box-sizing: border-box;
 }
 
 .character-slot-mat {
-  width: 115px;
-  height: 165px;
+  width: 104px;
+  height: 148px;
   border: 2px dashed rgba(0, 242, 254, 0.35);
-  border-radius: 12px;
+  border-radius: 10px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1893,36 +1902,42 @@ body {
 }
 
 .slot-placeholder {
-  font-size: 0.7rem;
+  font-size: 0.68rem;
   font-weight: 700;
   color: var(--text-muted);
   text-transform: uppercase;
   text-align: center;
   pointer-events: none;
+  line-height: 1.3;
 }
 
 /* Zona Recursos */
 .mat-zone-recursos {
-  width: 140px;
+  width: 90px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
   justify-content: center;
+  align-items: center;
   box-sizing: border-box;
 }
 
 .grave-zone-mat-mini {
-  height: 90px;
+  width: 66px;
+  height: 95px;
+  aspect-ratio: 675/975;
   border: 2px solid rgba(0, 242, 254, 0.25);
-  border-radius: 8px;
+  border-radius: 7px;
   background: rgba(10, 15, 25, 0.5);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  position: relative;
   transition: var(--transition-smooth);
+  box-sizing: border-box;
 }
 
 .grave-zone-mat-mini:hover {
@@ -1930,15 +1945,31 @@ body {
   box-shadow: 0 0 12px rgba(0, 242, 254, 0.25);
 }
 
+.grave-count-badge-mat {
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: var(--accent-cyan);
+  margin-top: 4px;
+}
+
+.opponent-grave .grave-count-badge-mat {
+  color: var(--accent-danger);
+}
+
 .deck-zone-mat-mini {
-  height: 105px;
+  width: 66px;
+  height: 95px;
+  aspect-ratio: 675/975;
   cursor: pointer;
+  position: relative;
+  box-sizing: border-box;
 }
 
 .pile-back-mat-mini {
   width: 100%;
   height: 100%;
-  border-radius: 8px;
+  aspect-ratio: 675/975;
+  border-radius: 7px;
   background: url('/imagenes/reverso.jpg') no-repeat center center;
   background-size: cover;
   border: 2px solid rgba(0, 242, 254, 0.35);
@@ -1954,7 +1985,7 @@ body {
   content: '';
   position: absolute;
   top: 0; left: 0; right: 0; bottom: 0;
-  border-radius: 6px;
+  border-radius: 5px;
   box-shadow: inset 0 0 10px rgba(0, 242, 254, 0.2);
 }
 
@@ -1966,15 +1997,20 @@ body {
 
 .deck-count-overlay-mat-mini {
   position: absolute;
-  top: 6px;
-  right: 6px;
+  top: 5px;
+  right: 5px;
   background: var(--accent-cyan);
   color: var(--bg-dark);
   font-weight: 800;
   font-size: 0.65rem;
-  padding: 2px 6px;
-  border-radius: 6px;
+  padding: 1px 5px;
+  border-radius: 5px;
   box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+}
+
+.opponent-deck .deck-count-overlay-mat-mini {
+  background: var(--accent-danger);
+  color: #fff;
 }
 
 .pile-name-mat-mini {
@@ -1982,8 +2018,8 @@ body {
   font-weight: 800;
   letter-spacing: 0.5px;
   color: rgba(255, 255, 255, 0.95);
-  background: rgba(0, 0, 0, 0.7);
-  padding: 3px 8px;
+  background: rgba(0, 0, 0, 0.75);
+  padding: 2px 6px;
   border-radius: 4px;
   text-transform: uppercase;
 }
