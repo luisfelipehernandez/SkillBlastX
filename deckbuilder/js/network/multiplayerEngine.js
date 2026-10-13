@@ -390,6 +390,13 @@ const MultiplayerEngine = (() => {
           }
           break;
 
+        case 'ACTION_REVEAL_CARDS':
+          // El rival está revelando cartas una por una (ej: ¡Desatar!, Investigación, Tagero, Marina)
+          if (Array.isArray(packet.cardIds) && typeof revealCardsSequentially === 'function') {
+            revealCardsSequentially(packet.cardIds, packet.title || '[Rival] Revelando Cartas', null, true);
+          }
+          break;
+
         case 'ACTION_SURRENDER':
           alert("¡Tu rival se ha rendido! Has ganado el duelo.");
           if (typeof showScreen === 'function') {
@@ -815,6 +822,7 @@ const MultiplayerEngine = (() => {
       '⚔ ',
       '⚔️ ',
       '[Combate]',
+      '[REVELADO]',
       '🌐',
       '[Rival]',
       '[Turno ',

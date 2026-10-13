@@ -5605,7 +5605,15 @@ function runActivationAnimation(element, callback, cardId = null) {
 }
 
 // Revelación secuencial animada de cartas (Efectos de Revelación/Desatar)
-function revealCardsSequentially(cardIds, title, callback) {
+function revealCardsSequentially(cardIds, title, callback, isRemote = false) {
+  if (typeof playtestState !== 'undefined' && playtestState.isOnlineMatch && !isRemote && typeof MultiplayerEngine !== 'undefined' && MultiplayerEngine.isConnected()) {
+    MultiplayerEngine.sendPacket({
+      type: 'ACTION_REVEAL_CARDS',
+      cardIds: cardIds,
+      title: `[Rival] ${title}`
+    });
+  }
+
   const modal = document.getElementById('reveal-modal');
   const display = document.getElementById('reveal-card-display');
   const info = document.getElementById('reveal-card-info');
@@ -5637,7 +5645,7 @@ function revealCardsSequentially(cardIds, title, callback) {
       progress.textContent = `Carta ${currentIdx + 1} de ${cardIds.length}`;
       
       display.classList.add('show');
-      addLog(`[REVELADO] Carta ${currentIdx + 1}: <strong>${card.nombre}</strong> (${card.tipo}).`, 'var(--accent-warning)');
+      addLog(`${isRemote ? '🌐 [Rival - REVELADO]' : '[REVELADO]'} Carta ${currentIdx + 1}: <strong>${card.nombre}</strong> (${card.tipo}).`, 'var(--accent-warning)');
       
       currentIdx++;
       setTimeout(showNext, 1200);
@@ -24310,7 +24318,7 @@ function activateSkillFieldEffect(slotIndex, skillId, skIndex) {
     return;
   }
 
-  if (typeof FieldEffects !== 'undefined' && FieldEffects.hasSkill(skillId)) {
+  if (typeof HTMLElement === 'undefined' && typeof FieldEffects !== 'undefined' && FieldEffects.hasSkill(skillId)) {
     return FieldEffects.executeSkill(skillId, slotIndex, skIndex, 'player');
   }
 
@@ -33181,7 +33189,7 @@ function activateEffect(slotIndex) {
     return;
   }
 
-  if (typeof FieldEffects !== 'undefined' && FieldEffects.hasCharacter(card.id)) {
+  if (typeof HTMLElement === 'undefined' && typeof FieldEffects !== 'undefined' && FieldEffects.hasCharacter(card.id)) {
     return FieldEffects.executeCharacter(card.id, slotIndex, 'player');
   }
 

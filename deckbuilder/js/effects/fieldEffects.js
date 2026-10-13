@@ -551,7 +551,7 @@
         return true;
       },
 
-      // ¡Desatar! (BBX-SP023): Enviar ¡Desatar! al cementerio, revelar 2 del tope del deck, añadir Skills a mano y Personajes a cementerio
+      // ¡Desatar! (BBX-SP023): Enviar ¡Desatar! al cementerio, revelar 2 del tope del deck, añadir Skills a mano y barajar el resto al deck
       'BBX-SP023': (slotIndex, skIndex, owner = 'player', opts = {}, cb = null) => {
         const { state, mySlots, myDeck, myHand, myGrave, tag } = getState(owner);
         const slot = mySlots[slotIndex];
@@ -567,23 +567,21 @@
 
         const revealed = myDeck.splice(0, 2);
         const addedSkills = [];
-        const sentChars = [];
+        const returnedCards = [];
         revealed.forEach(cid => {
           const c = getCard(cid);
           if (c && c.tipo === 'Skill') {
             myHand.push(cid);
             addedSkills.push(c.nombre || cid);
           } else {
-            myGrave.push(cid);
-            sentChars.push(c?.nombre || cid);
-            if (typeof root.dispatchGraveTriggers === 'function') {
-              root.dispatchGraveTriggers(cid, owner, { fromZone: 'deck' });
-            }
+            myDeck.push(cid);
+            returnedCards.push(c?.nombre || cid);
           }
         });
+        shuffle(myDeck);
         state.usedGlobalEffects = state.usedGlobalEffects || [];
         state.usedGlobalEffects.push('¡Desatar!');
-        logMsg(`${tag} Activó ¡Desatar! (SP023): Añadió ${addedSkills.join(', ') || 'ninguna Skill'} a mano y envió ${sentChars.join(', ') || 'ningún Personaje'} al cementerio.`, 'var(--accent-cyan)');
+        logMsg(`${tag} Activó ¡Desatar! (SP023): Reveló 2 cartas, añadió ${addedSkills.join(', ') || 'ninguna Skill'} a mano y barajó el deck.`, 'var(--accent-cyan)');
         updateView();
         if (cb) cb(true);
         return true;

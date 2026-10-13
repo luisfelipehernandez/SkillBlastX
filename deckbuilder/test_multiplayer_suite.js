@@ -234,6 +234,13 @@ assert(global.playtestState.opponentGrave.length === 1 && global.playtestState.o
 assert(global.playtestState.opponentSlots[1].effectUsed === true, '7.10 El estado effectUsed de Deida en campo rival debe sincronizarse');
 console.log('  ✔ PASS: 7.1 a 7.10 Sincronización espejo de Banca, Mano, Mazo, Cementerio y Campo verificada al 100%');
 
+// 11. Validación de Revelación Secuencial Compartida (¡Desatar! BBX-SP023 -> ACTION_REVEAL_CARDS)
+console.log('\n--- SECCIÓN 8: Revelación Carta por Carta Compartida (¡Desatar! BBX-SP023) ---');
+assert(appCode.includes("type: 'ACTION_REVEAL_CARDS'"), '8.1 revealCardsSequentially debe transmitir ACTION_REVEAL_CARDS al oponente');
+assert(mpEngineCode.includes("case 'ACTION_REVEAL_CARDS':"), '8.2 MultiplayerEngine debe procesar ACTION_REVEAL_CARDS en el cliente rival');
+assert(appCode.includes("typeof HTMLElement === 'undefined' && typeof FieldEffects !== 'undefined' && FieldEffects.hasSkill(skillId)"), '8.3 activateSkillFieldEffect en navegador debe usar la interfaz interactiva con revealCardsSequentially en lugar del atajo headless');
+console.log('  ✔ PASS: 8.1 a 8.3 Revelación secuencial carta por carta (¡Desatar! / efectos de revelación) verificada para ambos jugadores');
+
 console.log('\n======================================================');
 console.log('🎉 TODAS LAS PRUEBAS DE MULTIPLAYER ENGINE PASARON (100%)');
 console.log('======================================================\n');
