@@ -709,9 +709,10 @@ body {
   border-radius: 6px;
   overflow: visible;
   border: 1px solid var(--border-glass);
-  cursor: grab;
-  transition: transform 0.2s ease;
+  cursor: pointer !important;
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
   z-index: 5;
+  user-select: none;
 }
 
 .in-game-card img {
@@ -719,7 +720,9 @@ body {
   height: 100%;
   object-fit: cover;
   border-radius: 6px;
-  pointer-events: none;
+  pointer-events: none !important;
+  user-select: none !important;
+  -webkit-user-drag: none !important;
 }
 
 /* Carta rotada para Ataque */
@@ -744,21 +747,39 @@ body {
   border-radius: 4px;
   border: 1px solid var(--border-glass);
   overflow: hidden;
-  cursor: pointer;
+  cursor: pointer !important;
   box-shadow: 0 3px 10px rgba(0,0,0,0.8);
-  transition: var(--transition-smooth);
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  user-select: none;
 }
 
 .equipped-skill:hover {
-  transform: translateY(-8px) scale(2);
-  z-index: 100;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.8);
+  transform: translateY(-4px) scale(1.15) !important;
+  z-index: 100 !important;
+  border-color: var(--accent-cyan) !important;
+  box-shadow: 0 4px 15px rgba(0, 242, 254, 0.5) !important;
 }
 
 .equipped-skill img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  pointer-events: none !important;
+  user-select: none !important;
+  -webkit-user-drag: none !important;
+}
+
+.equipped-skill.used {
+  filter: grayscale(0.65) brightness(0.55);
+  opacity: 0.7;
+  border-color: rgba(255, 255, 255, 0.15) !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6) !important;
+}
+
+.equipped-skill.used:hover {
+  filter: grayscale(0.35) brightness(0.75);
+  opacity: 0.9;
+  border-color: rgba(0, 242, 254, 0.5) !important;
 }
 
 /* Controles de la carta en campo */
@@ -1248,7 +1269,8 @@ body {
   transform: translateY(-1px);
 }
 
-.btn-sidebar-exit:hover {
+.btn-sidebar-exit:hover,
+.btn-sidebar-surrender:hover {
   border-color: var(--accent-danger);
   color: var(--accent-danger);
 }
@@ -1760,21 +1782,26 @@ body {
   border-radius: 4px;
   border: 1px solid var(--border-glass);
   overflow: hidden;
-  cursor: pointer;
+  cursor: pointer !important;
   box-shadow: 0 3px 10px rgba(0,0,0,0.8);
-  transition: var(--transition-smooth);
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  user-select: none;
 }
 
 .equipped-skill:hover {
-  transform: translateY(-8px) scale(2);
-  z-index: 100;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.8);
+  transform: translateY(-4px) scale(1.15) !important;
+  z-index: 100 !important;
+  border-color: var(--accent-cyan) !important;
+  box-shadow: 0 4px 15px rgba(0, 242, 254, 0.5) !important;
 }
 
 .equipped-skill img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  pointer-events: none !important;
+  user-select: none !important;
+  -webkit-user-drag: none !important;
 }
 
 /* Soporte de filas del campo */
@@ -1893,6 +1920,7 @@ body {
   background: rgba(0, 0, 0, 0.35);
   box-shadow: 0 0 10px rgba(0, 242, 254, 0.05);
   transition: var(--transition-smooth);
+  cursor: pointer !important;
 }
 
 .character-slot-mat.drag-over {
@@ -2622,15 +2650,9 @@ body.selection-active .log-zone-mat-mini {
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(15, 23, 42, 0.6);
   transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
-  cursor: pointer;
+  cursor: default;
   user-select: none;
-}
-
-.phase-pill:hover {
-  color: #fff;
-  border-color: rgba(0, 242, 254, 0.4);
-  background: rgba(0, 242, 254, 0.12);
-  transform: translateY(-1px);
+  pointer-events: none;
 }
 
 .phase-pill.active {

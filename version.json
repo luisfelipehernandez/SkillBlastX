@@ -1,9 +1,9 @@
 {
-  "version": "1.1.4",
-  "version_code": 7,
-  "release_date": "2026-10-12",
+  "version": "1.1.5",
+  "version_code": 8,
+  "release_date": "2026-10-15",
   "name": "Skill Blast X",
-  "description": "Modo Multijugador Online P2P: revelación secuencial carta por carta sincronizada en ambas pantallas para ¡Desatar! y efectos de revelación",
+  "description": "Regla obligatoria de banca por fin de turno sin personajes (1 personaje a la banca o derrota si mazo vacío), bloqueo de evolución Avanzada sobre Avanzada y fase automática.",
   "repo_url": "https://github.com/luisfelipehernandez/SkillBlastX",
   "raw_base_url": "https://raw.githubusercontent.com/luisfelipehernandez/SkillBlastX/main/"
 }

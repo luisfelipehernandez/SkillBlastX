@@ -499,7 +499,7 @@
 
       overlay.innerHTML = `
         <div class="activation-card-wrap">
-          <div class="activation-card-badge">⚡ ¡ACTIVACIÓN DE EFECTO!</div>
+          <div class="activation-card-badge">${isPlayer ? '⚡ ¡ACTIVACIÓN DE EFECTO!' : '⚡ ¡ACTIVACIÓN DEL RIVAL!'}</div>
           <div class="activation-img-frame">
             <img src="/imagenes/${card.imagen}" alt="${card.nombre}" class="activation-card-img">
           </div>
@@ -597,10 +597,8 @@
       phases.forEach(ph => {
         const el = document.getElementById(`phase-step-${ph}`);
         if (el) {
-          el.style.cursor = 'pointer';
-          el.onclick = () => {
-            this.showPhaseBanner(ph);
-          };
+          el.style.cursor = 'default';
+          el.onclick = null;
         }
       });
       const btn = document.getElementById('btn-sound-toggle');

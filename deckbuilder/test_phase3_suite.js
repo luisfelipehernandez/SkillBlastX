@@ -428,7 +428,7 @@ async function runPhase3Tests() {
   assert(sandbox.playtestState.opponentGrave.includes('BBX-SP008'),
     '2.4 Control del pensar (SP012) envió al cementerio la skill del rival');
 
-  // 2.5 SP023 ¡Desatar!: Se envía al cementerio, revela 2, skills a mano y personajes a cementerio
+  // 2.5 SP023 ¡Desatar!: Se envía al cementerio, revela 2, skills a mano y resto de cartas al deck
   resetState();
   sandbox.playtestState.slots[0].character = 'BBX-SP001';
   sandbox.playtestState.slots[0].skills = ['BBX-SP023'];
@@ -437,8 +437,8 @@ async function runPhase3Tests() {
   assert(!sandbox.playtestState.slots[0].skills.includes('BBX-SP023') &&
          sandbox.playtestState.grave.includes('BBX-SP023') &&
          sandbox.playtestState.hand.includes('BBX-SP008') &&
-         sandbox.playtestState.grave.includes('BBX-SP005'),
-    '2.5 ¡Desatar! (SP023) envió skills a mano y personaje a cementerio');
+         sandbox.playtestState.deck.includes('BBX-SP005'),
+    '2.5 ¡Desatar! (SP023) envió skills a mano y cartas no-skill al deck');
 
   // 2.6 SP027 Preludio: Barajar 1 carta del cementerio al mazo
   resetState();

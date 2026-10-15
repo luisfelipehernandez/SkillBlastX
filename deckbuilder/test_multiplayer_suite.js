@@ -154,7 +154,7 @@ assert(global.playtestState.slots[1].skills.length === initialSkills.length, '6.
 console.log('  ✔ PASS: 6.4 equipSkill bloquea equipar habilidades en el turno del rival');
 
 // Extraer toggleTurnOwner y validar bloqueo manual
-eval(appCode.match(/function toggleTurnOwner\(\)[\s\S]*?\n\}/)[0]);
+eval(appCode.match(/function toggleTurnOwner\([^)]*\)[\s\S]*?\n\}/)[0]);
 toggleTurnOwner();
 assert(global.playtestState.turnOwner === 'opponent', '6.5 toggleTurnOwner no debe cambiar de turno manualmente en online');
 console.log('  ✔ PASS: 6.5 toggleTurnOwner bloquea alternar turnos manualmente en online');

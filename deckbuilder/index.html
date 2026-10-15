@@ -239,6 +239,7 @@
           <!-- Botones de Acción Superior -->
           <div class="sidebar-top-actions">
             <button class="btn-sidebar-action btn-sidebar-exit" onclick="showScreen('main-menu')" title="Volver al Menú Principal">🚪 Salir</button>
+            <button class="btn-sidebar-action btn-sidebar-surrender" id="btn-sidebar-surrender" onclick="surrenderMatch()" title="Rendirse del Duelo">🏳️ Rendirse</button>
             <button class="btn-sidebar-action btn-sidebar-reset" onclick="restartPlaytest()" title="Reiniciar el Duelo">🔄 Reiniciar</button>
             <button class="btn-sidebar-action btn-sidebar-options" onclick="openDuelSetupModal()" title="Configuración de Duelo">⚙ Opciones</button>
           </div>
@@ -294,8 +295,8 @@
                 <span id="phase-step-end" class="phase-pill" title="Fase Final: Resolución y Fin de Turno">3. FINAL</span>
               </div>
 
-              <button id="btn-toggle-turn" class="btn-toggle-turn-sbx" onclick="toggleTurnOwner()">Turno: Jugador</button>
-              <button id="btn-pass-turn" class="btn-pass-turn-sbx" onclick="startNewTurn()">⚔️ TERMINAR TURNO</button>
+              <button id="btn-toggle-turn" class="btn-toggle-turn-sbx" onclick="endCurrentTurn()">Turno: Jugador</button>
+              <button id="btn-pass-turn" class="btn-pass-turn-sbx" onclick="endCurrentTurn()">⚔️ TERMINAR TURNO</button>
               <button id="btn-sound-toggle" class="btn-sound-toggle" onclick="AnimationEngine.toggleSound()" title="Activar/Silenciar Efectos de Sonido">🔊 SFX</button>
             </div>
 
@@ -348,7 +349,7 @@
                   <div class="mat-upper-row opponent-row">
                     
                     <!-- Banca Oponente -->
-                    <div class="mat-zone-banca" id="opp-bench-visible-dropzone" ondragover="allowDrop(event)" ondrop="handleDropOnOpponentBench(event)">
+                    <div class="mat-zone-banca" id="opp-bench-visible-dropzone">
                       <div class="zone-label-mini">BANCA RIVAL</div>
                       <div id="playtest-opp-bench" class="bench-slots-container-mini">
                         <!-- Cartas en la banca del oponente -->
@@ -399,7 +400,7 @@
                   <div class="mat-upper-row player-row">
                     
                     <!-- Banca Jugador -->
-                    <div class="mat-zone-banca" id="bench-visible-dropzone" ondragover="allowDrop(event)" ondrop="handleDropOnBench(event)">
+                    <div class="mat-zone-banca" id="bench-visible-dropzone">
                       <div class="zone-label-mini">TU BANCA</div>
                       <div id="playtest-bench" class="bench-slots-container-mini">
                         <!-- Cartas en la banca del jugador -->
@@ -517,6 +518,24 @@
           </button>
         </div>
 
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal de Fin de Partida Oficial (Victoria / Derrota / Rendición) -->
+  <div id="match-end-modal" class="modal-overlay hidden" style="z-index: 10000;">
+    <div class="modal-content glass-panel" style="max-width: 520px; text-align: center; padding: 32px 24px; border-radius: 16px; border: 2px solid var(--accent-cyan); box-shadow: 0 10px 40px rgba(0,0,0,0.85);">
+      <div id="match-end-icon" style="font-size: 3.8rem; margin-bottom: 12px;">🏆</div>
+      <h2 id="match-end-title" style="font-size: 1.85rem; font-weight: 900; letter-spacing: 2px; margin-bottom: 10px; color: var(--accent-cyan);">¡VICTORIA!</h2>
+      <p id="match-end-subtitle" style="font-size: 1rem; color: var(--text-bright); line-height: 1.5; margin-bottom: 24px;">Has derrotado a 3 personajes del rival.</p>
+      
+      <div style="display: flex; justify-content: center; gap: 14px; flex-wrap: wrap;">
+        <button id="btn-match-end-menu" class="btn btn-primary" onclick="exitToMainMenuAfterMatch()" style="padding: 12px 26px; font-weight: 800; font-size: 1rem;">
+          🏠 Menú Principal
+        </button>
+        <button id="btn-match-end-stay" class="btn btn-secondary" onclick="closeMatchEndModal()" style="padding: 12px 20px; font-size: 0.9rem;">
+          🔍 Revisar Tablero
+        </button>
       </div>
     </div>
   </div>

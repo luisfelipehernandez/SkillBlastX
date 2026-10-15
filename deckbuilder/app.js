@@ -12,6 +12,7 @@ let activeDeckName = "Sin Guardar";
 // Estado del Playtest
 let playtestState = {
   matchEnded: false, // Flag de fin de partida (alcanzar 3 personajes en banca)
+  turnTransitionInProgress: false, // Bloqueo anti-duplicación durante la secuencia de fin de turno
   // Jugador (Tú)
   deck: [],       // Mazo de juego actual (IDs)
   hand: [],       // Mano actual (IDs)
@@ -123,6 +124,25 @@ function showScreen(screenName) {
   if (screenName === 'deckbuilder') targetId = 'section-deckbuilder';
   else if (screenName === 'playtest' || screenName === 'duel') targetId = 'section-playtest';
   else if (screenName === 'main-menu' || screenName === 'menu') targetId = 'section-main-menu';
+
+  if (targetId !== 'section-playtest' && typeof playtestState !== 'undefined' && playtestState.isOnlineMatch && typeof MultiplayerEngine !== 'undefined' && MultiplayerEngine.isConnected()) {
+    if (!playtestState.matchEnded && typeof confirm === 'function') {
+      const wantsExit = confirm("¿Seguro que deseas abandonar la partida Multijugador Online en curso? Se cerrará la conexión con tu rival.");
+      if (!wantsExit) return;
+      try {
+        MultiplayerEngine.sendPacket({ type: 'ACTION_SURRENDER' });
+      } catch (e) {}
+    }
+    try {
+      if (typeof MultiplayerEngine.cancelRoom === 'function') {
+        MultiplayerEngine.cancelRoom();
+      } else if (typeof MultiplayerEngine.disconnect === 'function') {
+        MultiplayerEngine.disconnect();
+      }
+    } catch (e) {
+      console.warn("Error desconectando multijugador:", e);
+    }
+  }
 
   // Ocultar todas las secciones
   document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active-content'));
@@ -284,6 +304,10 @@ function onDuelOppDeckChange() {
 }
 
 function openDuelSetupModal() {
+  if (typeof playtestState !== 'undefined' && playtestState.isOnlineMatch && typeof MultiplayerEngine !== 'undefined' && MultiplayerEngine.isConnected()) {
+    alert("La configuración de Duelo Rápido / Sandbox no está disponible durante una partida Multijugador Online activa.");
+    return;
+  }
   populateDuelDecks();
   const modal = document.getElementById('duel-setup-modal');
   if (modal) modal.classList.remove('hidden');
@@ -569,6 +593,8 @@ function updateTurnBadgeUI() {
   const passBtn = document.getElementById('btn-pass-turn');
   const isPlayer = (playtestState.turnOwner === 'player');
   const turnNum = playtestState.turnCount || 1;
+  const isTransitioning = !!playtestState.turnTransitionInProgress;
+  const isMatchEnded = !!playtestState.matchEnded;
 
   if (badge) {
     badge.textContent = isPlayer ? `TURNO ${turnNum}: TU TURNO` : `TURNO ${turnNum}: TURNO RIVAL`;
@@ -578,10 +604,13 @@ function updateTurnBadgeUI() {
     btn.textContent = isPlayer ? "Turno: Jugador" : "Turno: Oponente";
     btn.style.color = isPlayer ? "var(--accent-cyan)" : "var(--accent-danger)";
     btn.style.borderColor = isPlayer ? "var(--accent-cyan)" : "var(--accent-danger)";
+    btn.disabled = isTransitioning || isMatchEnded;
+    btn.style.opacity = (isTransitioning || isMatchEnded) ? '0.6' : '1';
   }
   if (passBtn) {
-    passBtn.disabled = !isPlayer;
-    passBtn.style.opacity = isPlayer ? '1' : '0.4';
+    const canPass = isPlayer && !isTransitioning && !isMatchEnded;
+    passBtn.disabled = !canPass;
+    passBtn.style.opacity = canPass ? '1' : '0.4';
   }
 }
 
@@ -1321,11 +1350,7 @@ function loadOpponentDeckToPlaytest() {
 }
 
 function playerDeckClick() {
-  if (playtestState.isOnlineMatch) {
-    alert("En duelos online, el robo de carta es automático al inicio de tu turno o mediante efectos de cartas.");
-    return;
-  }
-  drawCard();
+  alert("El robo de turno es automático al inicio de tu turno. Solo puedes robar más cartas mediante efectos de cartas.");
 }
 
 function opponentDrawCard(sourceType) {
@@ -1362,8 +1387,98 @@ function opponentDrawCard(sourceType) {
   }
 }
 
+function attachGraveyardInterceptors() {
+  if (typeof playtestState === 'undefined' || !playtestState) return;
+
+  if (Array.isArray(playtestState.grave)) {
+    playtestState.grave.push = function(...items) {
+      const res = Array.prototype.push.apply(this, items);
+      items.forEach(id => {
+        if (id === 'BBX-SP200') {
+          playtestState.ascensoArcanoCountThisTurn = (playtestState.ascensoArcanoCountThisTurn || 0) + 1;
+        }
+        if (id === 'BBX-SP246') {
+          playtestState.descansoCountThisTurn = (playtestState.descansoCountThisTurn || 0) + 1;
+        }
+        if (id === 'BBX-SP263') {
+          playtestState.apagonCountThisTurn = (playtestState.apagonCountThisTurn || 0) + 1;
+        }
+        if (id === 'BBX-SP293') {
+          playtestState.desertarCountThisTurn = (playtestState.desertarCountThisTurn || 0) + 1;
+        }
+        if (id === 'BBX-SP404' && playtestState.turnOwner === 'opponent') {
+          playtestState.recursosSP404SentTurn = playtestState.turnCount || 1;
+        }
+        setTimeout(() => {
+          checkAndTriggerDesdeLaSombraPlayer(id);
+          checkAndTriggerLiberarEstatica(id);
+          checkAndTriggerKatshi205(id);
+          checkAndTriggerKatshi255(id);
+          checkAndTriggerKatshi260(id);
+          checkAndTriggerReflejoSiniestro(id);
+          checkAndTriggerRemembranza(id, 'player');
+          checkAndTriggerQuiebreSP234(id);
+          checkAndTriggerEnergiaArcana(id);
+        }, 100);
+      });
+      return res;
+    };
+  }
+
+  if (Array.isArray(playtestState.opponentGrave)) {
+    playtestState.opponentGrave.push = function(...items) {
+      const res = Array.prototype.push.apply(this, items);
+      items.forEach(id => {
+        if (id === 'BBX-SP200') {
+          playtestState.opponentAscensoArcanoCountThisTurn = (playtestState.opponentAscensoArcanoCountThisTurn || 0) + 1;
+        }
+        if (id === 'BBX-SP246') {
+          playtestState.opponentDescansoCountThisTurn = (playtestState.opponentDescansoCountThisTurn || 0) + 1;
+        }
+        if (id === 'BBX-SP263') {
+          playtestState.opponentApagonCountThisTurn = (playtestState.opponentApagonCountThisTurn || 0) + 1;
+        }
+        if (id === 'BBX-SP293') {
+          playtestState.opponentDesertarCountThisTurn = (playtestState.opponentDesertarCountThisTurn || 0) + 1;
+        }
+        if (id === 'BBX-SP404' && playtestState.turnOwner === 'player') {
+          playtestState.opponentRecursosSP404SentTurn = playtestState.turnCount || 1;
+        }
+        if (playtestState.isOnlineMatch) {
+          if (typeof MultiplayerEngine !== 'undefined' && MultiplayerEngine.isConnected() && typeof MultiplayerEngine.sendGraveTriggerToPeer === 'function' && !MultiplayerEngine.isApplyingRemote()) {
+            MultiplayerEngine.sendGraveTriggerToPeer(id, { fromInterceptor: true });
+          }
+          return;
+        }
+        if (id === 'BBX-SP407') {
+          setTimeout(() => {
+            if (typeof checkAndTriggerTormentaDigitalSP407 === 'function') {
+              checkAndTriggerTormentaDigitalSP407('BBX-SP407', 'hand', 'opponent');
+            }
+          }, 100);
+        }
+        setTimeout(() => {
+          checkAndTriggerDesdeLaSombraOpponent(id);
+          checkAndTriggerKatshi255Opponent(id);
+          checkAndTriggerKatshi260Opponent(id);
+          checkAndTriggerReflejoSiniestroOpponent(id);
+          checkAndTriggerRemembranza(id, 'opponent');
+          checkAndTriggerEnergiaArcanaOpponent(id);
+        }, 100);
+      });
+      return res;
+    };
+  }
+}
+if (typeof window !== 'undefined') window.attachGraveyardInterceptors = attachGraveyardInterceptors;
+if (typeof global !== 'undefined') global.attachGraveyardInterceptors = attachGraveyardInterceptors;
+
 // Iniciar/Reiniciar Playtest
 function restartPlaytest() {
+  if (typeof playtestState !== 'undefined' && playtestState.isOnlineMatch && typeof MultiplayerEngine !== 'undefined' && MultiplayerEngine.isConnected()) {
+    alert("No puedes reiniciar unilateralmente un Duelo Online P2P en curso. Si deseas terminar la partida, usa el botón Salir.");
+    return;
+  }
   playtestState.matchEnded = false;
   playtestState.deck = [...currentDeck.main];
   playtestState.hand = [];
@@ -1455,73 +1570,8 @@ function restartPlaytest() {
   document.getElementById('playtest-log').innerHTML = '<div style="color: var(--text-muted);">Mesa inicializada.</div>';
   addLog("Configurando duelo...", 'var(--accent-cyan)');
 
-  // Redefinir .push de cementerios para interceptar "Desde la sombra", "Liberar estática" y "Ascenso arcano"
-  playtestState.grave.push = function(...items) {
-    const res = Array.prototype.push.apply(this, items);
-    items.forEach(id => {
-      if (id === 'BBX-SP200') {
-        playtestState.ascensoArcanoCountThisTurn = (playtestState.ascensoArcanoCountThisTurn || 0) + 1;
-      }
-      if (id === 'BBX-SP246') {
-        playtestState.descansoCountThisTurn = (playtestState.descansoCountThisTurn || 0) + 1;
-      }
-      if (id === 'BBX-SP263') {
-        playtestState.apagonCountThisTurn = (playtestState.apagonCountThisTurn || 0) + 1;
-      }
-      if (id === 'BBX-SP293') {
-        playtestState.desertarCountThisTurn = (playtestState.desertarCountThisTurn || 0) + 1;
-      }
-      if (id === 'BBX-SP404' && playtestState.turnOwner === 'opponent') {
-        playtestState.recursosSP404SentTurn = playtestState.turnCount || 1;
-      }
-      setTimeout(() => {
-        checkAndTriggerDesdeLaSombraPlayer(id);
-        checkAndTriggerLiberarEstatica(id);
-        checkAndTriggerKatshi205(id);
-        checkAndTriggerKatshi255(id);
-        checkAndTriggerKatshi260(id);
-        checkAndTriggerReflejoSiniestro(id);
-        checkAndTriggerRemembranza(id, 'player');
-        checkAndTriggerQuiebreSP234(id);
-        checkAndTriggerEnergiaArcana(id);
-      }, 100);
-    });
-    return res;
-  };
-
-  playtestState.opponentGrave.push = function(...items) {
-    const res = Array.prototype.push.apply(this, items);
-    items.forEach(id => {
-      if (id === 'BBX-SP246') {
-        playtestState.opponentDescansoCountThisTurn = (playtestState.opponentDescansoCountThisTurn || 0) + 1;
-      }
-      if (id === 'BBX-SP263') {
-        playtestState.opponentApagonCountThisTurn = (playtestState.opponentApagonCountThisTurn || 0) + 1;
-      }
-      if (id === 'BBX-SP293') {
-        playtestState.opponentDesertarCountThisTurn = (playtestState.opponentDesertarCountThisTurn || 0) + 1;
-      }
-      if (id === 'BBX-SP404' && playtestState.turnOwner === 'player') {
-        playtestState.opponentRecursosSP404SentTurn = playtestState.turnCount || 1;
-      }
-      if (id === 'BBX-SP407') {
-        setTimeout(() => {
-          if (typeof checkAndTriggerTormentaDigitalSP407 === 'function') {
-            checkAndTriggerTormentaDigitalSP407('BBX-SP407', 'hand', 'opponent');
-          }
-        }, 100);
-      }
-      setTimeout(() => {
-        checkAndTriggerDesdeLaSombraOpponent(id);
-        checkAndTriggerKatshi255Opponent(id);
-        checkAndTriggerKatshi260Opponent(id);
-        checkAndTriggerReflejoSiniestroOpponent(id);
-        checkAndTriggerRemembranza(id, 'opponent');
-        checkAndTriggerEnergiaArcanaOpponent(id);
-      }, 100);
-    });
-    return res;
-  };
+  // Redefinir .push de cementerios para interceptar efectos disparados al caer al cementerio
+  attachGraveyardInterceptors();
 
   const personajesEnMazo = playtestState.deck.filter(id => cardsDatabase[id].tipo === 'Personaje');
   if (personajesEnMazo.length === 0) {
@@ -2090,7 +2140,7 @@ function shufflePlaytestDeck() {
   updatePlaytestView();
 }
 
-function drawCard(sourceType) {
+function drawCard(sourceType, isTurnStartDraw = false) {
   if (sourceType === 'character' && isDrawByCharacterBlocked('player')) {
     addLog(`[Efecto Continuo] Se bloqueó el robo de carta por efecto de Personaje (Helica SP135 o Nara BBX-SP252).`, 'var(--accent-purple)');
     return;
@@ -2114,12 +2164,19 @@ function drawCard(sourceType) {
   
   // Lanzar la hermosa animación visual
   animateCardDraw('player', drawnId);
-  
-  if (typeof MultiplayerEngine !== 'undefined' && MultiplayerEngine.isConnected()) {
-    MultiplayerEngine.sendPacket({ type: 'ACTION_DRAW_CARD' });
-  }
 
   updatePlaytestView();
+
+  if (typeof MultiplayerEngine !== 'undefined' && MultiplayerEngine.isConnected()) {
+    MultiplayerEngine.sendPacket({
+      type: 'ACTION_DRAW_CARD',
+      isTurnStartDraw: !!isTurnStartDraw,
+      cardId: drawnId,
+      turnCount: playtestState.turnCount || 1,
+      alreadySynced: true
+    });
+  }
+
   if (sourceType === 'character' || sourceType === 'skill') {
     checkAndTriggerServicioImpecable('player', sourceType);
   }
@@ -2199,6 +2256,26 @@ function passOnlineTurnToOpponent() {
   updatePlaytestView();
 }
 
+// Acción oficial de "Terminar Turno": Pasa a Fase Final, resuelve efectos y cede el turno al oponente
+function endCurrentTurn() {
+  if (playtestState.matchEnded) {
+    return;
+  }
+  if (playtestState.turnTransitionInProgress) {
+    console.warn("Transición de turno ya en curso, ignorando clic adicional.");
+    return;
+  }
+  if (typeof MultiplayerEngine !== 'undefined' && MultiplayerEngine.isConnected()) {
+    if (playtestState.turnOwner !== 'player') {
+      alert("Es el turno de tu rival.");
+      return;
+    }
+    toggleTurnOwner(true);
+    return;
+  }
+  toggleTurnOwner();
+}
+
 // Botón de Nuevo Turno (Restaura efectos "Una vez por turno")
 function startNewTurn() {
   if (typeof MultiplayerEngine !== 'undefined' && MultiplayerEngine.isConnected()) {
@@ -2206,8 +2283,7 @@ function startNewTurn() {
       alert("Es el turno de tu rival.");
       return;
     }
-    passOnlineTurnToOpponent();
-    MultiplayerEngine.sendPacket({ type: "ACTION_END_TURN" });
+    toggleTurnOwner(true);
     return;
   }
   if (playtestState.isDuelVsAI) {
@@ -2333,10 +2409,24 @@ function startNewTurn() {
   });
 }
 
-function toggleTurnOwner() {
-  if (playtestState.isOnlineMatch) {
+function toggleTurnOwner(isOnlineEndTurn = false) {
+  if (playtestState.matchEnded) {
+    return;
+  }
+  if (playtestState.turnTransitionInProgress) {
+    console.warn("Transición de turno ya en curso en toggleTurnOwner.");
+    return;
+  }
+  if (playtestState.isOnlineMatch && !isOnlineEndTurn) {
     alert("En duelos online, el turno finaliza únicamente usando el botón 'TERMINAR TURNO'.");
     return;
+  }
+  playtestState.turnTransitionInProgress = true;
+  if (typeof updateTurnBadgeUI === 'function') {
+    updateTurnBadgeUI();
+  }
+  if (typeof window !== 'undefined' && window.AnimationEngine && typeof window.AnimationEngine.updatePhase === 'function') {
+    window.AnimationEngine.updatePhase('end');
   }
   const previousOwner = playtestState.turnOwner;
 
@@ -2357,7 +2447,7 @@ function toggleTurnOwner() {
         }
       }
     });
-  } else {
+  } else if (!playtestState.isOnlineMatch) {
     playtestState.opponentSlots.forEach(s => {
       if (s.character && s.skills.includes('BBX-SP068') && s.attacksDeclared >= 3) {
         let drawnNames = [];
@@ -2613,7 +2703,7 @@ function toggleTurnOwner() {
     }
 
     // Verificar si el rival tiene activaciones pendientes de Descanso
-    if ((playtestState.opponentDescansoCountThisTurn || 0) > 0) {
+    if (!playtestState.isOnlineMatch && (playtestState.opponentDescansoCountThisTurn || 0) > 0) {
       const oppDeckNaras = playtestState.opponentDeck.map((id, idx) => ({ id, source: 'deck', originalIdx: idx })).filter(item => isNaraChar(item.id));
       const oppGraveNaras = isGraveToHandBlocked() ? [] : playtestState.opponentGrave.map((id, idx) => ({ id, source: 'grave', originalIdx: idx })).filter(item => isNaraChar(item.id));
       const oppTotalOptions = [...oppDeckNaras, ...oppGraveNaras];
@@ -2680,6 +2770,10 @@ function toggleTurnOwner() {
     const playerDeckKatshis = playtestState.deck.filter(isKatshiChar);
 
     const checkOpponentBenchKatshi = () => {
+      if (playtestState.isOnlineMatch) {
+        nextCallback();
+        return;
+      }
       const oppBenchKatshi = playtestState.opponentBench.find(b => b.id === 'BBX-SP242' && !b.effectUsed);
       const oppDeckKatshis = playtestState.opponentDeck.filter(isKatshiChar);
 
@@ -2850,7 +2944,7 @@ function toggleTurnOwner() {
     }
 
     // Verificar si el rival tiene activaciones pendientes de Apagón
-    if ((playtestState.opponentApagonCountThisTurn || 0) > 0) {
+    if (!playtestState.isOnlineMatch && (playtestState.opponentApagonCountThisTurn || 0) > 0) {
       if (isGraveToHandBlocked()) {
         playtestState.opponentApagonCountThisTurn = 0;
         checkApagonOrProceed(nextCallback);
@@ -2924,6 +3018,10 @@ function toggleTurnOwner() {
     const isEligibleSkill = id => cardsDatabase[id] && cardsDatabase[id].tipo === 'Skill' && cardsDatabase[id].nombre !== 'Ocaso del pasado' && id !== 'BBX-SP265';
 
     const checkOpponentOcaso = () => {
+      if (playtestState.isOnlineMatch) {
+        nextCallback();
+        return;
+      }
       const oppHasOcaso = playtestState.opponentSlots.some(s => s.character && s.skills && s.skills.includes('BBX-SP265') && !isSkillEffectBlocked('BBX-SP265', 'opponent', s));
       const oppEligibleSkills = isGraveToHandBlocked() ? [] : playtestState.opponentGrave.filter(isEligibleSkill);
 
@@ -3073,7 +3171,7 @@ function toggleTurnOwner() {
     }
 
     // 2. Caso Rival: se envió Desertar del oponente al cementerio este turno
-    if ((playtestState.opponentDesertarCountThisTurn || 0) > 0) {
+    if (!playtestState.isOnlineMatch && (playtestState.opponentDesertarCountThisTurn || 0) > 0) {
       if (isGraveToHandBlocked()) {
         addLog(`[Efecto Desertar BBX-SP293 Rival] El rival no puede recuperar cartas del cementerio a su mano debido al efecto continuo de Haruka (SP251).`, 'var(--text-muted)');
         playtestState.opponentDesertarCountThisTurn = 0;
@@ -3132,15 +3230,24 @@ function toggleTurnOwner() {
     nextCallback();
   };
 
+  let mandatoryBenchPenaltyApplied = false;
+
   const checkMandatoryBenchRuleOrProceed = (nextCallback) => {
+    if (mandatoryBenchPenaltyApplied) {
+      nextCallback();
+      return;
+    }
+
     if (previousOwner === 'player') {
       const hasActiveFieldChar = playtestState.slots.some(s => s && s.character);
       if (!hasActiveFieldChar) {
         const charsInDeck = playtestState.deck.filter(id => cardsDatabase[id] && cardsDatabase[id].tipo === 'Personaje');
         if (charsInDeck.length > 0) {
-          addLog("<strong>[Regla Obligatoria de Banca]</strong> Al concluir todos los efectos de final de turno no controlas ningún Personaje activo en juego: debes colocar 1 Personaje desde tu deck en tu banca.", 'var(--accent-cyan)');
+          addLog("<strong>[Regla Obligatoria de Banca]</strong> Al concluir todos los efectos de final de turno no controlas ningún Personaje activo en juego: debes colocar 1 Personaje desde tu deck en tu banca (como si fuera destruido por batalla).", 'var(--accent-cyan)');
           
           openCardChooserModal(charsInDeck, "Regla Obligatoria de Banca: Selecciona 1 Personaje de tu deck para colocar en tu Banca", (chosenIdx) => {
+            if (mandatoryBenchPenaltyApplied) return;
+            mandatoryBenchPenaltyApplied = true;
             const chosenId = charsInDeck[chosenIdx];
             const idxInDeck = playtestState.deck.indexOf(chosenId);
             if (idxInDeck !== -1) {
@@ -3148,10 +3255,13 @@ function toggleTurnOwner() {
             }
             playtestState.bench.push({ id: chosenId, effectUsed: false });
             shuffleArray(playtestState.deck);
-            addLog(`[Regla Obligatoria de Banca] Colocaste a <strong>${cardsDatabase[chosenId].nombre}</strong> en tu banca desde tu deck y barajaste el mazo.`, 'var(--accent-purple)');
+            addLog(`[Regla Obligatoria de Banca] Colocaste a <strong>${cardsDatabase[chosenId].nombre}</strong> en tu banca desde tu deck y barajaste el mazo (penalización por terminar turno sin personaje).`, 'var(--accent-purple)');
             updatePlaytestView();
+            if (playtestState.matchEnded) return;
             nextCallback();
           }, () => {
+            if (mandatoryBenchPenaltyApplied) return;
+            mandatoryBenchPenaltyApplied = true;
             const fallbackId = charsInDeck[0];
             const idxInDeck = playtestState.deck.indexOf(fallbackId);
             if (idxInDeck !== -1) {
@@ -3159,20 +3269,31 @@ function toggleTurnOwner() {
             }
             playtestState.bench.push({ id: fallbackId, effectUsed: false });
             shuffleArray(playtestState.deck);
-            addLog(`[Regla Obligatoria de Banca] Colocaste automáticamente a <strong>${cardsDatabase[fallbackId].nombre}</strong> en tu banca desde tu deck y barajaste el mazo.`, 'var(--accent-purple)');
+            addLog(`[Regla Obligatoria de Banca] Colocaste automáticamente a <strong>${cardsDatabase[fallbackId].nombre}</strong> en tu banca desde tu deck y barajaste el mazo (penalización por terminar turno sin personaje).`, 'var(--accent-purple)');
             updatePlaytestView();
+            if (playtestState.matchEnded) return;
             nextCallback();
           });
           return;
         } else {
-          addLog("[Regla Obligatoria de Banca] No controlas ningún Personaje activo en juego, pero no quedan Personajes en tu deck.", 'var(--text-muted)');
+          // No quedan personajes en el deck: ¡Pierdes el duelo de inmediato!
+          mandatoryBenchPenaltyApplied = true;
+          playtestState.matchEnded = true;
+          addLog("❌ <strong>DERROTA</strong>: Has finalizado tu turno sin ningún Personaje activo en juego y no te quedan Personajes en tu deck para colocar en la banca. ¡Has perdido la partida!", 'var(--accent-danger)');
+          if (typeof adjustBo3Score === 'function') {
+            adjustBo3Score('defeats', 1);
+          }
+          showMatchEndModal(false, "DERROTA", "Terminaste tu turno sin Personajes en tu campo y no te quedan Personajes en tu deck para colocar en la banca.\n¡Has perdido el duelo!");
+          updatePlaytestView();
+          return;
         }
       }
-    } else if (previousOwner === 'opponent') {
+    } else if (previousOwner === 'opponent' && !playtestState.isOnlineMatch) {
       const hasOppActiveFieldChar = playtestState.opponentSlots.some(s => s && s.character);
       if (!hasOppActiveFieldChar) {
         const oppCharsInDeck = playtestState.opponentDeck.filter(id => cardsDatabase[id] && cardsDatabase[id].tipo === 'Personaje');
         if (oppCharsInDeck.length > 0) {
+          mandatoryBenchPenaltyApplied = true;
           const chosenId = oppCharsInDeck[0];
           const idxInDeck = playtestState.opponentDeck.indexOf(chosenId);
           if (idxInDeck !== -1) {
@@ -3180,8 +3301,20 @@ function toggleTurnOwner() {
           }
           playtestState.opponentBench.push({ id: chosenId, effectUsed: false });
           shuffleArray(playtestState.opponentDeck);
-          addLog(`[Regla Obligatoria de Banca Rival] El Oponente no controlaba ningún Personaje activo en juego: colocó a <strong>${cardsDatabase[chosenId].nombre}</strong> en su banca desde su deck y barajó su mazo.`, 'var(--accent-purple)');
+          addLog(`[Regla Obligatoria de Banca Rival] El Oponente no controlaba ningún Personaje activo en juego: colocó a <strong>${cardsDatabase[chosenId].nombre}</strong> en su banca desde su deck y barajó su mazo (como si fuera destruido por batalla).`, 'var(--accent-purple)');
           updatePlaytestView();
+          if (playtestState.matchEnded) return;
+        } else {
+          // No quedan personajes en el deck rival: ¡Victoria para el jugador!
+          mandatoryBenchPenaltyApplied = true;
+          playtestState.matchEnded = true;
+          addLog("🏆 <strong>¡VICTORIA!</strong> El rival ha finalizado su turno sin ningún Personaje activo en juego y no le quedan Personajes en su deck para colocar en la banca. ¡Has ganado la partida!", 'var(--accent-cyan)');
+          if (typeof adjustBo3Score === 'function') {
+            adjustBo3Score('victories', 1);
+          }
+          showMatchEndModal(true, "¡VICTORIA!", "El oponente terminó su turno sin Personajes en su campo y no le quedan Personajes en su deck para colocar en la banca.\n¡Has ganado el duelo!");
+          updatePlaytestView();
+          return;
         }
       }
     }
@@ -3264,6 +3397,10 @@ function toggleTurnOwner() {
   }
 
   if (previousOwner === 'player') {
+    if (playtestState.isOnlineMatch) {
+      checkMarinaSP186OrProceed(endOfTurnFinalCallback);
+      return;
+    }
     const checkOpponentRoySP227OrProceed = () => {
       const oppEligible = [];
       playtestState.opponentSlots.forEach((s, idx) => {
@@ -3868,30 +4005,13 @@ function toggleTurnOwner() {
                     checkNaraSP184OrProceed();
                   };
 
-                  if (playtestState.opponentHand.includes('BBX-SP180')) {
-                    const itemsRyu = [
-                      {
-                        text: "🛡️ Activar Ryu-chan (SP180) del rival (Enviar al cementerio en su lugar)",
-                        action: () => {
-                          const rIdx = playtestState.opponentHand.indexOf('BBX-SP180');
-                          if (rIdx !== -1) {
-                            const discardedRyu = playtestState.opponentHand.splice(rIdx, 1)[0];
-                            playtestState.opponentGrave.push(discardedRyu);
-                            addLog(`[Efecto Ryu-chan SP180] El adversario descartó a Ryu-chan de su mano al cementerio. Sus Skills portadas fueron protegidas de ser barajadas al deck.`, 'var(--accent-purple)');
-                          }
-                          updatePlaytestView();
-                          checkNaraSP184OrProceed();
-                        }
-                      },
-                      {
-                        text: "❌ No activar Ryu-chan (Permitir barajar las Skills)",
-                        action: () => {
-                          proceedShuffle();
-                        }
-                      }
-                    ];
-                    const dummyEvent = { clientX: window.innerWidth / 2 - 120, clientY: window.innerHeight / 2 - 80 };
-                    showContextMenu(dummyEvent, itemsRyu);
+                  if (typeof checkAndProtectShuffleSkillsToDeck === 'function') {
+                    checkAndProtectShuffleSkillsToDeck('opponent', () => {
+                      updatePlaytestView();
+                      checkNaraSP184OrProceed();
+                    }, () => {
+                      proceedShuffle();
+                    }, selectedItems.length, currentTargetable.length);
                   } else {
                     proceedShuffle();
                   }
@@ -4383,6 +4503,36 @@ function toggleTurnOwner() {
 }
 
 function proceedToNextTurn() {
+  const wasPlayerTurnInOnline = !!(playtestState.isOnlineMatch && playtestState.turnOwner === 'player');
+  if (wasPlayerTurnInOnline) {
+    playtestState.pendingRoy339SearchPlayer = 0;
+    playtestState.ascensoArcanoCountThisTurn = 0;
+    playtestState.descansoCountThisTurn = 0;
+    playtestState.apagonCountThisTurn = 0;
+    playtestState.ocasoDelPasadoUsedThisTurn = false;
+    playtestState.desertarCountThisTurn = 0;
+    if (Array.isArray(playtestState.pendingPlanificar342List)) {
+      playtestState.pendingPlanificar342List = playtestState.pendingPlanificar342List.filter(item => item && item.owner === 'opponent');
+    } else {
+      playtestState.pendingPlanificar342List = [];
+    }
+    playtestState.turnOwner = 'opponent';
+    playtestState.turnTransitionInProgress = false;
+    const btn = document.getElementById('btn-toggle-turn');
+    if (btn) {
+      btn.textContent = "Turno: Oponente (Rival)";
+      btn.style.borderColor = "var(--accent-purple)";
+      btn.style.color = "var(--accent-purple)";
+    }
+    if (typeof updateTurnBadgeUI === 'function') updateTurnBadgeUI();
+    addLog(`⚔️ Has terminado tu turno. Ahora es el turno de tu rival.`, 'var(--text-muted)');
+    updatePlaytestView();
+    if (typeof MultiplayerEngine !== 'undefined' && MultiplayerEngine.isConnected()) {
+      MultiplayerEngine.sendPacket({ type: "ACTION_END_TURN", endedTurnCount: playtestState.turnCount || 1 });
+    }
+    return;
+  }
+
   playtestState.pendingRoy339SearchPlayer = 0;
   playtestState.pendingRoy339SearchOpponent = 0;
   playtestState.usedBajoLaLuzLunarGraveCount = 0;
@@ -4403,16 +4553,17 @@ function proceedToNextTurn() {
   playtestState.cannotEquipSkillNameThisTurn = null;
   playtestState.ascensoArcanoCountThisTurn = 0;
   playtestState.descansoCountThisTurn = 0;
-  playtestState.opponentDescansoCountThisTurn = 0;
   playtestState.apagonCountThisTurn = 0;
-  playtestState.opponentApagonCountThisTurn = 0;
   playtestState.ocasoDelPasadoUsedThisTurn = false;
-  playtestState.opponentOcasoDelPasadoUsedThisTurn = false;
   playtestState.desenfundarUsedThisTurn = false;
   playtestState.opponentDesenfundarUsedThisTurn = false;
   playtestState.descuidoUsedThisTurn = false;
   playtestState.opponentDescuidoUsedThisTurn = false;
   playtestState.desertarCountThisTurn = 0;
+  playtestState.opponentAscensoArcanoCountThisTurn = 0;
+  playtestState.opponentDescansoCountThisTurn = 0;
+  playtestState.opponentApagonCountThisTurn = 0;
+  playtestState.opponentOcasoDelPasadoUsedThisTurn = false;
   playtestState.opponentDesertarCountThisTurn = 0;
   playtestState.opponentBorealInsidiosaUsedThisTurn = false;
   playtestState.usedVoidOh367ThisTurn = false;
@@ -4427,6 +4578,7 @@ function proceedToNextTurn() {
   playtestState.opponentUnplayableCharactersToFieldThisTurn = [];
   playtestState.turnCount = (playtestState.turnCount || 1) + 1;
   playtestState.turnOwner = (playtestState.turnOwner === 'player') ? 'opponent' : 'player';
+  playtestState.turnTransitionInProgress = false;
 
   playtestState.slots.forEach(slot => {
     slot.effectUsed = false;
@@ -4480,96 +4632,159 @@ function proceedToNextTurn() {
   }
 
   const btn = document.getElementById('btn-toggle-turn');
-  if (btn) {
-    if (playtestState.turnOwner === 'player') {
-      btn.textContent = "Turno: Jugador";
+  if (playtestState.turnOwner === 'player') {
+    if (btn) {
+      btn.textContent = playtestState.isOnlineMatch ? "Turno: Jugador (Tú)" : "Turno: Jugador";
       btn.style.borderColor = "var(--accent-cyan)";
       btn.style.color = "var(--accent-cyan)";
-      addLog("--- TURNO CAMBIADO --- Ahora es el turno del Jugador.", 'var(--accent-cyan)');
-      if (typeof window !== 'undefined' && window.AnimationEngine && typeof window.AnimationEngine.showTurnBanner === 'function') {
-        window.AnimationEngine.showTurnBanner(playtestState.turnCount || 1, 'player', 'FASE PRINCIPAL • TU TURNO');
-      }
-      if (typeof window !== 'undefined' && window.AnimationEngine && typeof window.AnimationEngine.updatePhase === 'function') {
-        window.AnimationEngine.updatePhase('main');
-      }
+    }
+    if (typeof updateTurnBadgeUI === 'function') updateTurnBadgeUI();
 
-      // Robo automático del jugador por inicio de turno
-      let playerDrawnId = null;
-      if (playtestState.deck.length > 0 && !playtestState.cannotDrawByEffectsThisTurn) {
-        playerDrawnId = playtestState.deck.shift();
-        playtestState.hand.push(playerDrawnId);
-        addLog(`Robaste 1 carta por inicio de turno (<strong>${cardsDatabase[playerDrawnId]?.nombre || playerDrawnId}</strong>).`, 'var(--accent-cyan)');
-        if (typeof animateCardDraw === 'function') animateCardDraw('player', playerDrawnId);
+    if (playtestState.isOnlineMatch) {
+      addLog(`⚔️ [Turno ${playtestState.turnCount}] ¡Es tu turno! Robas 1 carta.`, 'var(--accent-cyan)');
+      if (typeof window !== 'undefined' && window.AnimationEngine && typeof window.AnimationEngine.showPhaseBanner === 'function') {
+        window.AnimationEngine.showPhaseBanner(`TURNO ${playtestState.turnCount}: TU TURNO`);
       }
-      checkTageroSP058StartTurnOpponent(playerDrawnId, () => {
-        checkVoidOhStartTurnOpponent(() => {
-          checkNobukoSP420StartTurnOpponent(() => {
-            checkEishetStartTurnOpponent(() => {
-              if (typeof checkAumentarVigorSP417StartTurnOpponent === 'function') {
-                checkAumentarVigorSP417StartTurnOpponent(() => {
-                  updatePlaytestView();
-                });
-              } else {
+      const hadDeckCards = playtestState.deck && playtestState.deck.length > 0;
+      const canDrawAtStart = !playtestState.cannotDrawByEffectsThisTurn && hadDeckCards;
+      if (canDrawAtStart && typeof drawCard === 'function') {
+        drawCard(undefined, true);
+      } else {
+        updatePlaytestView();
+        if (typeof MultiplayerEngine !== 'undefined' && MultiplayerEngine.isConnected()) {
+          MultiplayerEngine.sendPacket({
+            type: "ACTION_DRAW_CARD",
+            isTurnStartDraw: true,
+            cardId: null,
+            noDraw: true,
+            turnCount: playtestState.turnCount || 1,
+            alreadySynced: true
+          });
+        }
+      }
+      return;
+    }
+
+    addLog("--- TURNO CAMBIADO --- Ahora es el turno del Jugador.", 'var(--accent-cyan)');
+    if (typeof window !== 'undefined' && window.AnimationEngine && typeof window.AnimationEngine.showTurnBanner === 'function') {
+      window.AnimationEngine.showTurnBanner(playtestState.turnCount || 1, 'player', 'FASE PRINCIPAL • TU TURNO');
+    }
+    if (typeof window !== 'undefined' && window.AnimationEngine && typeof window.AnimationEngine.updatePhase === 'function') {
+      window.AnimationEngine.updatePhase('main');
+    }
+
+    // Robo automático del jugador por inicio de turno
+    let playerDrawnId = null;
+    if (playtestState.deck.length > 0 && !playtestState.cannotDrawByEffectsThisTurn) {
+      playerDrawnId = playtestState.deck.shift();
+      playtestState.hand.push(playerDrawnId);
+      addLog(`Robaste 1 carta por inicio de turno (<strong>${cardsDatabase[playerDrawnId]?.nombre || playerDrawnId}</strong>).`, 'var(--accent-cyan)');
+      if (typeof animateCardDraw === 'function') animateCardDraw('player', playerDrawnId);
+    }
+    checkTageroSP058StartTurnOpponent(playerDrawnId, () => {
+      checkVoidOhStartTurnOpponent(() => {
+        checkNobukoSP420StartTurnOpponent(() => {
+          checkEishetStartTurnOpponent(() => {
+            if (typeof checkAumentarVigorSP417StartTurnOpponent === 'function') {
+              checkAumentarVigorSP417StartTurnOpponent(() => {
                 updatePlaytestView();
+              });
+            } else {
+              updatePlaytestView();
+            }
+          });
+        });
+      });
+    });
+    return;
+  } else {
+    if (btn) {
+      btn.textContent = playtestState.isOnlineMatch ? "Turno: Oponente (Rival)" : "Turno: Oponente";
+      btn.style.borderColor = playtestState.isOnlineMatch ? "var(--accent-purple)" : "var(--accent-danger)";
+      btn.style.color = playtestState.isOnlineMatch ? "var(--accent-purple)" : "var(--accent-danger)";
+    }
+    if (typeof updateTurnBadgeUI === 'function') updateTurnBadgeUI();
+
+    const onOpponentTurnStartChain = () => {
+      checkVoidOhStartTurnPlayer(() => {
+        checkNobukoSP189StartTurn(() => {
+          checkNobukoSP420StartTurnPlayer(() => {
+            checkEishetStartTurnPlayer(() => {
+              const finishStartChain = () => {
+                updatePlaytestView();
+                if (playtestState.isDuelVsAI && typeof AIEngine !== 'undefined') {
+                  setTimeout(() => { AIEngine.executeOpponentTurn(); }, 600);
+                }
+              };
+              if (typeof checkAumentarVigorSP417StartTurnPlayer === 'function') {
+                checkAumentarVigorSP417StartTurnPlayer(finishStartChain);
+              } else {
+                finishStartChain();
               }
             });
           });
         });
       });
+    };
+
+    if (playtestState.isOnlineMatch) {
+      addLog(`⚔️ Has terminado tu turno. Ahora es el turno de tu rival.`, 'var(--text-muted)');
+      updatePlaytestView();
+      if (typeof MultiplayerEngine !== 'undefined' && MultiplayerEngine.isConnected()) {
+        MultiplayerEngine.sendPacket({ type: "ACTION_END_TURN", endedTurnCount: (playtestState.turnCount || 2) - 1 });
+      }
+      return;
+    }
+
+    addLog("--- TURNO CAMBIADO --- Ahora es el turno del Oponente.", 'var(--accent-danger)');
+    if (typeof window !== 'undefined' && window.AnimationEngine && typeof window.AnimationEngine.showTurnBanner === 'function') {
+      window.AnimationEngine.showTurnBanner(playtestState.turnCount || 1, 'opponent', 'FASE PRINCIPAL • TURNO RIVAL');
+    }
+    if (typeof window !== 'undefined' && window.AnimationEngine && typeof window.AnimationEngine.updatePhase === 'function') {
+      window.AnimationEngine.updatePhase('main');
+    }
+
+    // Robo automático del oponente por inicio de turno
+    if (playtestState.opponentDeck.length > 0) {
+      const drawnId = playtestState.opponentDeck.shift();
+      playtestState.opponentHand.push(drawnId);
+      addLog(`Oponente robó 1 carta por inicio de turno.`, 'var(--accent-purple)');
+      if (typeof animateCardDraw === 'function') animateCardDraw('opponent', drawnId);
+      
+      checkTageroSP058StartTurnPlayer(drawnId, () => {
+        onOpponentTurnStartChain();
+      });
       return;
     } else {
-      btn.textContent = "Turno: Oponente";
-      btn.style.borderColor = "var(--accent-danger)";
-      btn.style.color = "var(--accent-danger)";
-      addLog("--- TURNO CAMBIADO --- Ahora es el turno del Oponente.", 'var(--accent-danger)');
-      if (typeof window !== 'undefined' && window.AnimationEngine && typeof window.AnimationEngine.showTurnBanner === 'function') {
-        window.AnimationEngine.showTurnBanner(playtestState.turnCount || 1, 'opponent', 'FASE PRINCIPAL • TURNO RIVAL');
-      }
-      if (typeof window !== 'undefined' && window.AnimationEngine && typeof window.AnimationEngine.updatePhase === 'function') {
-        window.AnimationEngine.updatePhase('main');
-      }
-      
-      const onOpponentTurnStartChain = () => {
-        checkVoidOhStartTurnPlayer(() => {
-          checkNobukoSP189StartTurn(() => {
-            checkNobukoSP420StartTurnPlayer(() => {
-              checkEishetStartTurnPlayer(() => {
-                const finishStartChain = () => {
-                  updatePlaytestView();
-                  if (playtestState.isDuelVsAI && typeof AIEngine !== 'undefined') {
-                    setTimeout(() => { AIEngine.executeOpponentTurn(); }, 600);
-                  }
-                };
-                if (typeof checkAumentarVigorSP417StartTurnPlayer === 'function') {
-                  checkAumentarVigorSP417StartTurnPlayer(finishStartChain);
-                } else {
-                  finishStartChain();
-                }
-              });
-            });
-          });
-        });
-      };
-
-      // Robo automático del oponente por inicio de turno
-      if (playtestState.opponentDeck.length > 0) {
-        const drawnId = playtestState.opponentDeck.shift();
-        playtestState.opponentHand.push(drawnId);
-        addLog(`Oponente robó 1 carta por inicio de turno.`, 'var(--accent-purple)');
-        if (typeof animateCardDraw === 'function') animateCardDraw('opponent', drawnId);
-        
-        checkTageroSP058StartTurnPlayer(drawnId, () => {
-          onOpponentTurnStartChain();
-        });
-        return;
-      } else {
-        onOpponentTurnStartChain();
-        return;
-      }
+      onOpponentTurnStartChain();
+      return;
     }
   }
-  updatePlaytestView();
 }
+
+function runOnlineOpponentTurnStartChain(drawnId, onDone) {
+  checkTageroSP058StartTurnPlayer(drawnId, () => {
+    checkVoidOhStartTurnPlayer(() => {
+      checkNobukoSP189StartTurn(() => {
+        checkNobukoSP420StartTurnPlayer(() => {
+          checkEishetStartTurnPlayer(() => {
+            const finishStartChain = () => {
+              if (typeof updatePlaytestView === 'function') updatePlaytestView();
+              if (typeof onDone === 'function') onDone();
+            };
+            if (typeof checkAumentarVigorSP417StartTurnPlayer === 'function') {
+              checkAumentarVigorSP417StartTurnPlayer(finishStartChain);
+            } else {
+              finishStartChain();
+            }
+          });
+        });
+      });
+    });
+  });
+}
+if (typeof window !== 'undefined') window.runOnlineOpponentTurnStartChain = runOnlineOpponentTurnStartChain;
+if (typeof global !== 'undefined') global.runOnlineOpponentTurnStartChain = runOnlineOpponentTurnStartChain;
 
 function checkTageroSP058StartTurnPlayer(drawnId, nextCallback) {
   let tageroSlotIndex = -1;
@@ -4597,6 +4812,9 @@ function checkTageroSP058StartTurnPlayer(drawnId, nextCallback) {
               const lostSkillId = tageroSlot.skills.splice(chosenIdx, 1)[0];
               playtestState.grave.push(lostSkillId);
               addLog(`[Efecto Tagero BBX-SP058] Enviaste tu Skill equipada <strong>${cardsDatabase[lostSkillId].nombre}</strong> al cementerio.`, 'var(--accent-purple)');
+              if (typeof onEquippedSkillSentToGraveByEffect === 'function') {
+                onEquippedSkillSentToGraveByEffect(lostSkillId, 'player', 'player');
+              }
 
               const idxInOppHand = playtestState.opponentHand.indexOf(drawnId);
               if (idxInOppHand !== -1) {
@@ -4605,6 +4823,7 @@ function checkTageroSP058StartTurnPlayer(drawnId, nextCallback) {
                 addLog(`[Efecto Tagero BBX-SP058] El adversario envió al fondo de su deck la carta que robó por inicio de turno (<strong>${cardsDatabase[drawnId].nombre}</strong>).`, 'var(--accent-purple)');
               }
               tageroSlot.effectUsed = true;
+              if (typeof updatePlaytestView === 'function') updatePlaytestView();
               if (nextCallback) nextCallback();
             });
           }
@@ -5591,6 +5810,13 @@ function runActivationAnimation(element, callback, cardId = null) {
     }
   }
 
+  if (typeof playtestState !== 'undefined' && playtestState.isOnlineMatch && detectedCardId && typeof MultiplayerEngine !== 'undefined' && MultiplayerEngine.isConnected() && !MultiplayerEngine.isApplyingRemote()) {
+    MultiplayerEngine.sendPacket({
+      type: 'ACTION_CARD_ACTIVATED',
+      cardId: detectedCardId
+    });
+  }
+
   if (typeof AnimationEngine !== 'undefined' && detectedCardId && typeof AnimationEngine.showCardActivation === 'function') {
     AnimationEngine.showCardActivation(detectedCardId, 'player', () => {
       if (element && element.classList) element.classList.remove('activating');
@@ -5795,6 +6021,88 @@ if (typeof global !== 'undefined') {
   global.isBenchEffectReady = isBenchEffectReady;
 }
 
+// Funciones de utilidad para el ciclo de vida de Skills equipadas
+function removeSkillFromSlotByIndex(slot, skIdx) {
+  if (!slot || !slot.skills || skIdx < 0 || skIdx >= slot.skills.length) return null;
+  const removedId = slot.skills.splice(skIdx, 1)[0];
+  if (slot.usedSkillIndexes && Array.isArray(slot.usedSkillIndexes)) {
+    const wasUsedPos = slot.usedSkillIndexes.indexOf(skIdx);
+    if (wasUsedPos !== -1) {
+      slot.usedSkillIndexes.splice(wasUsedPos, 1);
+      if (slot.usedSkills && Array.isArray(slot.usedSkills)) {
+        const uPos = slot.usedSkills.indexOf(removedId);
+        if (uPos !== -1) {
+          slot.usedSkills.splice(uPos, 1);
+        }
+      }
+    }
+    slot.usedSkillIndexes = slot.usedSkillIndexes.map(idx => (idx > skIdx ? idx - 1 : idx));
+  }
+  return removedId;
+}
+
+function isEquippedSkillUsed(slot, skId, skIndex, owner = 'player') {
+  if (!slot) return false;
+
+  // 1. Si el índice específico ya está registrado como usado en el slot
+  if (typeof skIndex === 'number' && skIndex >= 0 && (slot.usedSkillIndexes || []).includes(skIndex)) {
+    return true;
+  }
+
+  // 2. Comprobación HOPT (Hard Once Per Turn)
+  if (typeof playtestState !== 'undefined' && playtestState) {
+    const isPlayer = (owner === 'player');
+    const globalUsed = isPlayer
+      ? (playtestState.usedGlobalEffects || [])
+      : (playtestState.opponentUsedGlobalEffects || []);
+    const card = (typeof cardsDatabase !== 'undefined' && cardsDatabase) ? cardsDatabase[skId] : null;
+    const cardName = card ? card.nombre : null;
+
+    if (cardName && (globalUsed.includes(cardName) || globalUsed.includes(skId))) {
+      return true;
+    }
+    const perGameUsed = playtestState.usedPerGameEffects || [];
+    if (cardName && (perGameUsed.includes(cardName) || perGameUsed.includes(skId))) {
+      return true;
+    }
+
+    // 3. Casos de Skills específicas con variables de estado dedicadas
+    if (skId === 'BBX-SP342' && (isPlayer ? playtestState.usedPlanificar342ThisTurn : playtestState.opponentUsedPlanificar342ThisTurn)) {
+      return true;
+    }
+    if (skId === 'BBX-SP351' && (isPlayer ? playtestState.usedNostalgia351ThisTurn : playtestState.opponentUsedNostalgia351ThisTurn)) {
+      return true;
+    }
+    if (skId === 'BBX-SP353' && (isPlayer ? playtestState.usedSuenoDeSirvienta353ThisTurn : playtestState.opponentUsedSuenoDeSirvienta353ThisTurn)) {
+      return true;
+    }
+    if (skId === 'BBX-SP354' && (isPlayer ? playtestState.usedManipulacion354ThisTurn : playtestState.opponentUsedManipulacion354ThisTurn)) {
+      return true;
+    }
+  }
+
+  // 4. Fallback para skills que solo guardan en slot.usedSkills sin usedSkillIndexes:
+  // Si la cantidad de usos registrados en usedSkills es igual o mayor a la cantidad de copias de esta skill en el slot
+  if (slot.usedSkills && Array.isArray(slot.usedSkills)) {
+    const totalCopies = (slot.skills || []).filter(id => id === skId).length;
+    const usedCount = slot.usedSkills.filter(id => id === skId).length;
+    if (totalCopies > 0 && usedCount >= totalCopies) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+if (typeof window !== 'undefined') {
+  window.removeSkillFromSlotByIndex = removeSkillFromSlotByIndex;
+  window.isEquippedSkillUsed = isEquippedSkillUsed;
+}
+if (typeof global !== 'undefined') {
+  global.removeSkillFromSlotByIndex = removeSkillFromSlotByIndex;
+  global.isEquippedSkillUsed = isEquippedSkillUsed;
+}
+
 // Actualizar tablero de Playtest
 function updatePlaytestView() {
   const deckCountEl = document.getElementById('playtest-deck-count');
@@ -5981,7 +6289,7 @@ function updatePlaytestView() {
     const card = cardsDatabase[bItem.id];
     const cardEl = document.createElement('div');
     cardEl.className = 'bench-card';
-    cardEl.draggable = true;
+    cardEl.draggable = !playtestState.isOnlineMatch;
     cardEl.id = `bench-card-${index}`;
     cardEl.innerHTML = `<img src="/imagenes/${card.imagen}" alt="${card.nombre}">`;
     attachCardHover(cardEl, bItem.id);
@@ -5992,9 +6300,11 @@ function updatePlaytestView() {
       cardEl.classList.add('can-activate');
     }
 
-    cardEl.addEventListener('dragstart', (e) => {
-      e.dataTransfer.setData('text/plain', JSON.stringify({ source: 'bench', id: bItem.id, index: index }));
-    });
+    if (!playtestState.isOnlineMatch) {
+      cardEl.addEventListener('dragstart', (e) => {
+        e.dataTransfer.setData('text/plain', JSON.stringify({ source: 'bench', id: bItem.id, index: index }));
+      });
+    }
 
     cardEl.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -6071,7 +6381,7 @@ function updatePlaytestView() {
         cardEl.innerHTML = `<img src="/imagenes/${card.imagen}" alt="${card.nombre}">`;
         attachCardHover(cardEl, slotData.character);
       }
-      cardEl.draggable = true;
+      cardEl.draggable = !playtestState.isOnlineMatch;
       
       cardEl.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -6087,6 +6397,12 @@ function updatePlaytestView() {
         skEl.id = `equipped-skill-${i}-${skIndex}`;
         skEl.innerHTML = `<img src="/imagenes/${skCard.imagen}" alt="${skCard.nombre}">`;
         attachCardHover(skEl, skId);
+        
+        if (typeof window.isEquippedSkillUsed === 'function' && window.isEquippedSkillUsed(slotData, skId, skIndex, 'player')) {
+          skEl.classList.add('used');
+          skEl.style.filter = 'grayscale(0.65) brightness(0.55)';
+          skEl.style.opacity = '0.7';
+        }
         
         skEl.addEventListener('click', (e) => {
           e.stopPropagation();
@@ -6152,6 +6468,12 @@ function updatePlaytestView() {
         skEl.id = `opp-equipped-skill-${i}-${skIndex}`;
         skEl.innerHTML = `<img src="/imagenes/${skCard.imagen}" alt="${skCard.nombre}">`;
         attachCardHover(skEl, skId);
+        
+        if (typeof window.isEquippedSkillUsed === 'function' && window.isEquippedSkillUsed(slotData, skId, skIndex, 'opponent')) {
+          skEl.classList.add('used');
+          skEl.style.filter = 'grayscale(0.65) brightness(0.55)';
+          skEl.style.opacity = '0.7';
+        }
         
         skEl.addEventListener('click', (e) => {
           e.stopPropagation();
@@ -6268,10 +6590,18 @@ function handleDropOnSlot(e, slotIndex) {
       }
       if (currentSlot.character) {
         const charEnCampo = cardsDatabase[currentSlot.character];
-        if (card.clase === 'Avanzada' && charEnCampo.nombre === card.nombre) {
+        if (card.clase === 'Avanzada') {
+          if (charEnCampo.nombre !== card.nombre) {
+            alert(`Solo puedes evolucionar sobre un ${card.nombre}.`);
+            return;
+          }
+          if (charEnCampo.clase === 'Avanzada' || charEnCampo.clase === 'Avanzado') {
+            alert(`No puedes evolucionar a un Personaje Avanzado sobre otro Personaje Avanzado.`);
+            return;
+          }
           invokeCharacter(data.id, data.index, slotIndex);
         } else {
-          alert(card.clase === 'Avanzada' ? `Solo puedes evolucionar sobre un ${card.nombre}.` : `Slot ocupado por ${charEnCampo.nombre}.`);
+          alert(`Slot ocupado por ${charEnCampo.nombre}.`);
           return;
         }
       } else {
@@ -6309,6 +6639,7 @@ function handleDropOnSlot(e, slotIndex) {
       equipSkill(data.id, data.index, slotIndex);
     }
   } else if (data.source === 'bench') {
+    if (playtestState.isOnlineMatch) return;
     if (currentSlot.character) {
       alert("Slot de destino ocupado.");
       return;
@@ -6368,6 +6699,10 @@ function handleDropOnGrave(e) {
     playtestState.grave.push(cardId);
     addLog(`Descartaste <strong>${cardsDatabase[cardId].nombre}</strong> de la Banca.`);
   } else if (data.source.startsWith('slot-')) {
+    if (playtestState.isOnlineMatch) {
+      alert("En Duelos Online no puedes enviar cartas del campo al cementerio manualmente.");
+      return;
+    }
     destroySlot(parseInt(data.source.split('-')[1]));
   }
   updatePlaytestView();
@@ -6376,27 +6711,6 @@ function handleDropOnGrave(e) {
 function handleDropOnBench(e) {
   e.preventDefault();
   e.currentTarget.classList.remove('drag-over');
-  const data = JSON.parse(e.dataTransfer.getData('text/plain'));
-  
-  if (data.source === 'hand') {
-    if (playtestState.turnOwner !== 'player') {
-      alert("No puedes jugar cartas desde tu mano durante el turno del adversario.");
-      return;
-    }
-    const cardId = playtestState.hand[data.index];
-    if (cardsDatabase[cardId].tipo === 'Personaje') {
-      alert("No puedes colocar un Personaje de tu mano directamente en la Banca. Los personajes solo van a la banca si son destruidos en batalla o por efectos específicos.");
-      return;
-    }
-    
-    // Si es Skill u otra carta, permitir
-    playtestState.hand.splice(data.index, 1);
-    playtestState.bench.push({ id: cardId, effectUsed: false });
-    addLog(`Pusiste a <strong>${cardsDatabase[cardId].nombre}</strong> en la Banca.`);
-  } else if (data.source.startsWith('slot-')) {
-    moveSlotToBench(parseInt(data.source.split('-')[1]));
-  }
-  updatePlaytestView();
 }
 
 // Funciones del Oponente: Drag & Drop
@@ -6419,10 +6733,18 @@ function handleDropOnOpponentSlot(e, slotIndex) {
     if (card.tipo === 'Personaje') {
       if (currentSlot.character) {
         const charEnCampo = cardsDatabase[currentSlot.character];
-        if (card.clase === 'Avanzada' && charEnCampo.nombre === card.nombre) {
+        if (card.clase === 'Avanzada') {
+          if (charEnCampo.nombre !== card.nombre) {
+            alert(`Solo puedes evolucionar sobre un ${card.nombre}.`);
+            return;
+          }
+          if (charEnCampo.clase === 'Avanzada' || charEnCampo.clase === 'Avanzado') {
+            alert(`No puedes evolucionar a un Personaje Avanzado sobre otro Personaje Avanzado.`);
+            return;
+          }
           invokeOpponentCharacter(data.id, data.index, slotIndex, 'hand');
         } else {
-          alert(card.clase === 'Avanzada' ? `Solo puedes evolucionar sobre un ${card.nombre}.` : `Slot ocupado por ${charEnCampo.nombre}.`);
+          alert(`Slot ocupado por ${charEnCampo.nombre}.`);
           return;
         }
       } else {
@@ -6461,7 +6783,15 @@ function handleDropOnOpponentSlot(e, slotIndex) {
     if (card.tipo === 'Personaje') {
       if (currentSlot.character) {
         const charEnCampo = cardsDatabase[currentSlot.character];
-        if (card.clase === 'Avanzada' && charEnCampo.nombre === card.nombre) {
+        if (card.clase === 'Avanzada') {
+          if (charEnCampo.nombre !== card.nombre) {
+            alert(`Solo puedes evolucionar sobre un ${card.nombre}.`);
+            return;
+          }
+          if (charEnCampo.clase === 'Avanzada' || charEnCampo.clase === 'Avanzado') {
+            alert(`No puedes evolucionar a un Personaje Avanzado sobre otro Personaje Avanzado.`);
+            return;
+          }
           invokeOpponentCharacter(data.id, data.index, slotIndex, 'player-hand');
         } else {
           alert(`Slot ocupado por ${charEnCampo.nombre}.`);
@@ -6491,6 +6821,7 @@ function handleDropOnOpponentSlot(e, slotIndex) {
       equipOpponentSkill(data.id, data.index, slotIndex, 'player-hand');
     }
   } else if (data.source === 'opp-bench') {
+    if (playtestState.isOnlineMatch) return;
     if (currentSlot.character) {
       alert("Slot de destino ocupado.");
       return;
@@ -6536,22 +6867,6 @@ function handleDropOnOpponentSlot(e, slotIndex) {
 function handleDropOnOpponentBench(e) {
   e.preventDefault();
   e.currentTarget.classList.remove('drag-over');
-  const data = JSON.parse(e.dataTransfer.getData('text/plain'));
-  
-  if (data.source === 'opp-hand') {
-    const cardId = playtestState.opponentHand[data.index];
-    if (cardsDatabase[cardId].tipo === 'Personaje') {
-      alert("No puedes colocar un Personaje de la mano directamente en la Banca.");
-      return;
-    }
-    playtestState.opponentHand.splice(data.index, 1);
-    playtestState.opponentBench.push({ id: cardId, effectUsed: false });
-    addLog(`[RIVAL] Pusiste a <strong>${cardsDatabase[cardId].nombre}</strong> en la Banca.`, 'var(--accent-purple)');
-  } else if (data.source.startsWith('opp-slot-')) {
-    const slotIdx = parseInt(data.source.split('-')[2]);
-    moveOpponentSlotToBench(slotIdx);
-  }
-  updatePlaytestView();
 }
 
 function handleDropOnOpponentGrave(e) {
@@ -6571,6 +6886,10 @@ function handleDropOnOpponentGrave(e) {
     playtestState.opponentGrave.push(cardId);
     addLog(`[RIVAL] Descartó <strong>${cardsDatabase[cardId].nombre}</strong> de la Banca.`, 'var(--accent-purple)');
   } else if (data.source.startsWith('opp-slot-')) {
+    if (playtestState.isOnlineMatch) {
+      alert("En Duelos Online no puedes enviar cartas del campo al cementerio manualmente.");
+      return;
+    }
     const slotIdx = parseInt(data.source.split('-')[2]);
     destroyOpponentSlot(slotIdx);
   }
@@ -6588,8 +6907,13 @@ function invokeOpponentCharacter(cardId, sourceIndex, slotIndex, sourceZone) {
   }
 
   if (card.clase === 'Avanzada') {
-    if (!slot.character || cardsDatabase[slot.character].nombre !== card.nombre) {
+    const targetChar = slot.character ? cardsDatabase[slot.character] : null;
+    if (!targetChar || targetChar.nombre !== card.nombre) {
       addLog(`[RIVAL] Los Personajes de Clase Avanzada solo pueden jugarse evolucionando sobre un ${card.nombre} en campo.`, 'var(--text-muted)');
+      return false;
+    }
+    if (targetChar.clase === 'Avanzada' || targetChar.clase === 'Avanzado') {
+      addLog(`[RIVAL] No puede evolucionar a un Personaje Avanzado sobre otro Personaje Avanzado.`, 'var(--text-muted)');
       return false;
     }
   } else {
@@ -6822,11 +7146,20 @@ function destroyOpponentSlot(slotIndex) {
 
 /* ==================== MENÚS CONTEXTUALES ==================== */
 
+let activeContextMenuDismissHandler = null;
+
 function hideContextMenu() {
-  document.getElementById('card-context-menu').classList.add('hidden');
+  const menu = document.getElementById('card-context-menu');
+  if (menu) menu.classList.add('hidden');
+  if (typeof activeContextMenuDismissHandler === 'function') {
+    const handler = activeContextMenuDismissHandler;
+    activeContextMenuDismissHandler = null;
+    handler();
+  }
 }
 
-function showContextMenu(e, items) {
+function showContextMenu(e, items, onDismiss = null) {
+  activeContextMenuDismissHandler = onDismiss;
   const menu = document.getElementById('card-context-menu');
   if (!menu) return;
   menu.innerHTML = '';
@@ -6846,6 +7179,7 @@ function showContextMenu(e, items) {
       } else {
         btn.addEventListener('click', (ev) => {
           ev.stopPropagation();
+          activeContextMenuDismissHandler = null;
           hideContextMenu();
           item.action();
         });
@@ -6892,7 +7226,7 @@ function showOpponentHandCardMenu(e, id, index) {
   const hasFreeSlot = playtestState.opponentSlots.some(s => !s.character);
   const evolutionSlots = playtestState.opponentSlots
     .map((s, idx) => ({ slot: s, idx }))
-    .filter(item => item.slot.character && cardsDatabase[item.slot.character].nombre === card.nombre);
+    .filter(item => item.slot.character && cardsDatabase[item.slot.character].nombre === card.nombre && cardsDatabase[item.slot.character].clase !== 'Avanzada' && cardsDatabase[item.slot.character].clase !== 'Avanzado');
   const hasEvolutionSlot = evolutionSlots.length > 0;
   const canInvoke = isOpponentTurn && !isBlockedPlay && (isAvanzada ? hasEvolutionSlot : hasFreeSlot);
 
@@ -9168,7 +9502,9 @@ function showOpponentFieldCardMenu(e, slotIndex) {
                 }
               ];
               const dummyEvent = { clientX: window.innerWidth / 2 - 120, clientY: window.innerHeight / 2 - 80 };
-              showContextMenu(dummyEvent, itemsResistir);
+              showContextMenu(dummyEvent, itemsResistir, () => {
+                resolverCombate();
+              });
             } else {
               resolverCombate();
             }
@@ -10695,7 +11031,7 @@ function executeManipulacionSP354(activatorOwner = 'player', slotIndex, skIndex)
     const c = cardsDatabase[cId];
     if (!c || c.tipo !== 'Personaje') return false;
     if (c.clase === 'Avanzada') {
-      return oppSlots.some(s => s.character && cardsDatabase[s.character]?.nombre === c.nombre);
+      return oppSlots.some(s => s.character && cardsDatabase[s.character]?.nombre === c.nombre && cardsDatabase[s.character]?.clase !== 'Avanzada' && cardsDatabase[s.character]?.clase !== 'Avanzado');
     }
     return getFreeSlotIdx() !== -1;
   };
@@ -10721,7 +11057,7 @@ function executeManipulacionSP354(activatorOwner = 'player', slotIndex, skIndex)
 
     if (c.clase === 'Avanzada') {
       // Evolución
-      const matchSlotIdx = oppSlots.findIndex(s => s.character && cardsDatabase[s.character]?.nombre === c.nombre);
+      const matchSlotIdx = oppSlots.findIndex(s => s.character && cardsDatabase[s.character]?.nombre === c.nombre && cardsDatabase[s.character]?.clase !== 'Avanzada' && cardsDatabase[s.character]?.clase !== 'Avanzado');
       if (matchSlotIdx === -1) {
         addLog(`${tag} No fue posible jugar a <strong>${c.nombre} (${c.evolucion || 'Avanzada'})</strong> porque no hay un Personaje base en su campo.`, 'var(--text-muted)');
         updatePlaytestView();
@@ -11951,7 +12287,7 @@ function showHandCardMenu(e, cardId, index) {
     const hasFreeSlot = playtestState.slots.some(s => !s.character);
     const evolutionSlots = playtestState.slots
       .map((s, idx) => ({ slot: s, idx }))
-      .filter(item => item.slot.character && cardsDatabase[item.slot.character].nombre === card.nombre);
+      .filter(item => item.slot.character && cardsDatabase[item.slot.character].nombre === card.nombre && cardsDatabase[item.slot.character].clase !== 'Avanzada' && cardsDatabase[item.slot.character].clase !== 'Avanzado');
     const hasEvolutionSlot = evolutionSlots.length > 0;
     const isBlocked = typeof isCharacterPlayBlockedToField === 'function' && isCharacterPlayBlockedToField(cardId, 'player');
     const canInvoke = isPlayerTurn && !isBlocked && (isAvanzada ? hasEvolutionSlot : hasFreeSlot);
@@ -15957,8 +16293,12 @@ if (typeof global !== 'undefined') global.SKILLS_WITHOUT_FIELD_ACTIVATION = SKIL
 
   // Activar efectos de Skills portadas
   if (slot.skills && slot.skills.length > 0) {
-    slot.skills.forEach(skillId => {
+    slot.skills.forEach((skillId, skIndex) => {
       const skCard = cardsDatabase[skillId];
+      if (!skCard) return;
+
+      // Un Personaje base bajo una Evolución se considera una Skill portada sin efecto
+      if (skCard.tipo === 'Personaje') return;
       // Ignorar habilidades pasivas, continuas, reactivas o de mano/cementerio que no tienen un efecto activable manual en campo
       const _noFieldSkills = (typeof SKILLS_WITHOUT_FIELD_ACTIVATION !== 'undefined') ? SKILLS_WITHOUT_FIELD_ACTIVATION : ((typeof window !== 'undefined' && window.SKILLS_WITHOUT_FIELD_ACTIVATION) || (typeof global !== 'undefined' && global.SKILLS_WITHOUT_FIELD_ACTIVATION) || null);
       if (_noFieldSkills && _noFieldSkills.has(skillId)) return;
@@ -15966,8 +16306,11 @@ if (typeof global !== 'undefined') global.SKILLS_WITHOUT_FIELD_ACTIVATION = SKIL
       // Restricción por Conmoción BBX-SP261 (prohíbe enviar 3 o más cartas del deck al cementerio por efectos)
       if ((skillId === 'BBX-SP082' || skillId === 'BBX-SP148') && isConmocionActive()) return;
 
-      const usedSkills = slot.usedSkills || [];
-      let yaUsado = usedSkills.includes(skillId);
+      const isUsed = typeof window.isEquippedSkillUsed === 'function'
+        ? window.isEquippedSkillUsed(slot, skillId, skIndex, 'player')
+        : (slot.usedSkills || []).includes(skillId);
+      if (isUsed) return;
+      let yaUsado = isUsed;
 
       // Bloqueo dinámico por Próximo destino (BBX-SP406)
       if (typeof isSkillBlockedByProximoDestino === 'function' && isSkillBlockedByProximoDestino(skillId, 'player')) {
@@ -16062,7 +16405,8 @@ if (typeof global !== 'undefined') global.SKILLS_WITHOUT_FIELD_ACTIVATION = SKIL
       if (skillId === 'BBX-SP008') {
         const cantPersonajes = playtestState.slots.filter(s => s.character).length;
         const yaUsadoGlobal = playtestState.usedGlobalEffects.includes('¡Voluntad!');
-        if (cantPersonajes !== 1 || yaUsadoGlobal) {
+        const isBlocked = playtestState.cannotDrawByEffectsThisTurn || (typeof isDrawBySkillBlocked === 'function' && isDrawBySkillBlocked('player'));
+        if (cantPersonajes !== 1 || yaUsadoGlobal || isBlocked) {
           // Ocultación Dinámica: No mostrar la opción de activación si no se cumplen las condiciones
           return;
         }
@@ -16620,6 +16964,9 @@ if (typeof global !== 'undefined') global.SKILLS_WITHOUT_FIELD_ACTIVATION = SKIL
       let btnTitle = skillId === 'BBX-SP365'
         ? `✨ Activar efecto de Colapsar sistema (${playtestState.colapsarSistemaCount || 0}/3)`
         : `✨ Activar efecto de ${skCard.nombre}`;
+      if (slot.skills.filter(id => id === skillId).length > 1) {
+        btnTitle += ` (Copia ${skIndex + 1})`;
+      }
       if (!isPlayerTurn) {
         btnTitle = `⚠️ Solo en tu turno (${skCard.nombre})`;
       }
@@ -16631,7 +16978,7 @@ if (typeof global !== 'undefined') global.SKILLS_WITHOUT_FIELD_ACTIVATION = SKIL
           if (!isPlayerTurn) return;
           const cardEl = document.getElementById(`field-card-${slotIndex}`);
           runActivationAnimation(cardEl, () => {
-            activateSkillFieldEffect(slotIndex, skillId);
+            activateSkillFieldEffect(slotIndex, skillId, skIndex);
           });
         }
       });
@@ -16730,15 +17077,24 @@ if (typeof global !== 'undefined') global.SKILLS_WITHOUT_FIELD_ACTIVATION = SKIL
             slot.isRotated = true;
           }
 
-          if (typeof MultiplayerEngine !== 'undefined' && MultiplayerEngine.isConnected()) {
-            MultiplayerEngine.sendPacket({
-              type: 'ACTION_ATTACK',
-              attackerSlot: slotIndex,
-              targetSlot: oppSlotIdx
-            });
-          }
-
           addLog(`⚔ <strong>${card.nombre}</strong> declara un ataque contra <strong>${defenderCard.nombre}</strong> (Ataque ${slot.attacksDeclared}/${slot.maxAttacks || 1} de este turno).`, 'var(--accent-danger)');
+
+          if (playtestState.isOnlineMatch && typeof MultiplayerEngine !== 'undefined' && MultiplayerEngine.isConnected()) {
+            const sendAttackPacket = () => {
+              updatePlaytestView();
+              MultiplayerEngine.sendPacket({
+                type: 'ACTION_ATTACK',
+                attackerSlot: slotIndex,
+                targetSlot: oppSlotIdx
+              });
+            };
+            if (typeof checkAndTriggerDobleColisionSP409 === 'function') {
+              checkAndTriggerDobleColisionSP409('player', defenderSlot, sendAttackPacket);
+            } else {
+              sendAttackPacket();
+            }
+            return;
+          }
 
           if (defenderSlot && defenderSlot.character === 'BBX-SP319') {
             if (typeof checkAndTriggerChiakoSP319AttackTarget === 'function') {
@@ -16797,7 +17153,9 @@ if (typeof global !== 'undefined') global.SKILLS_WITHOUT_FIELD_ACTIVATION = SKIL
                 }
               ];
               const dummyEvent = { clientX: window.innerWidth / 2 - 120, clientY: window.innerHeight / 2 - 80 };
-              showContextMenu(dummyEvent, itemsResistir);
+              showContextMenu(dummyEvent, itemsResistir, () => {
+                resolverDueloDeCombate();
+              });
             } else {
               resolverDueloDeCombate();
             }
@@ -17016,18 +17374,38 @@ function showEquippedSkillMenu(e, slotIndex, skId, skIndex) {
   const isRealSkill = (skCard.tipo === 'Skill');
   const isPlayerTurn = playtestState.turnOwner === 'player';
 
+  if (!isRealSkill) {
+    items.push({
+      text: `ℹ️ Personaje Base (${skCard.nombre})`,
+      disabled: true,
+      action: () => {}
+    });
+    items.push({
+      text: `ℹ️ Tratado como Skill portada sin efecto (Evolución)`,
+      disabled: true,
+      action: () => {}
+    });
+    showContextMenu(e, items);
+    return;
+  }
+
   // Ocultación dinámica: Ignorar habilidades puramente pasivas o sin activación en campo
   if (isRealSkill) {
     const _noFieldSkills = (typeof SKILLS_WITHOUT_FIELD_ACTIVATION !== 'undefined') ? SKILLS_WITHOUT_FIELD_ACTIVATION : ((typeof window !== 'undefined' && window.SKILLS_WITHOUT_FIELD_ACTIVATION) || (typeof global !== 'undefined' && global.SKILLS_WITHOUT_FIELD_ACTIVATION) || null);
     let canActivate = !_noFieldSkills || !_noFieldSkills.has(skId);
     let isVoidOhDisabled = false;
+    const isUsed = typeof window.isEquippedSkillUsed === 'function'
+      ? window.isEquippedSkillUsed(slot, skId, skIndex, 'player')
+      : (slot.usedSkills || []).includes(skId);
+    if (isUsed) canActivate = false;
     const usedSkills = slot.usedSkills || [];
-    const yaUsado = usedSkills.includes(skId);
+    const yaUsado = isUsed;
 
     if (skId === 'BBX-SP008') { // ¡Voluntad!
       const cantPersonajes = playtestState.slots.filter(s => s.character).length;
       const yaUsadoGlobal = playtestState.usedGlobalEffects.includes('¡Voluntad!');
-      if (cantPersonajes !== 1 || yaUsadoGlobal || isDrawBySkillBlocked()) canActivate = false;
+      const isBlocked = playtestState.cannotDrawByEffectsThisTurn || (typeof isDrawBySkillBlocked === 'function' && isDrawBySkillBlocked('player'));
+      if (cantPersonajes !== 1 || yaUsadoGlobal || isBlocked) canActivate = false;
     }
     
     if (skId === 'BBX-SP010') { // Investigación
@@ -18434,8 +18812,12 @@ function showEquippedSkillMenu(e, slotIndex, skId, skIndex) {
   }
 
   if (items.length === 0) {
+    const isAlreadyUsed = typeof window.isEquippedSkillUsed === 'function' && window.isEquippedSkillUsed(slot, skId, skIndex, 'player');
+    const msg = isAlreadyUsed
+      ? `ℹ️ Efecto ya utilizado este turno (${skCard.nombre})`
+      : `ℹ️ Efecto no disponible o ya utilizado (${skCard.nombre})`;
     items.push({
-      text: `ℹ️ Efecto no disponible o ya utilizado (${skCard.nombre})`,
+      text: msg,
       disabled: true,
       action: () => {}
     });
@@ -18462,8 +18844,13 @@ function invokeCharacter(cardId, handIndex, slotIndex) {
   const slot = playtestState.slots[slotIndex];
   
   if (card.clase === 'Avanzada') {
-    if (!slot.character || cardsDatabase[slot.character].nombre !== card.nombre) {
+    const targetChar = slot.character ? cardsDatabase[slot.character] : null;
+    if (!targetChar || targetChar.nombre !== card.nombre) {
       alert(`Los Personajes de Clase Avanzada solo pueden jugarse evolucionando sobre un ${card.nombre} en campo.`);
+      return false;
+    }
+    if (targetChar.clase === 'Avanzada' || targetChar.clase === 'Avanzado') {
+      alert(`No puedes evolucionar a un Personaje Avanzado sobre otro Personaje Avanzado.`);
       return false;
     }
   } else {
@@ -21650,7 +22037,9 @@ function resolveOpponentStandardDestructionBase(slotIndex) {
         }
       });
       const dummyEvent = { clientX: window.innerWidth / 2 - 120, clientY: window.innerHeight / 2 - 80 };
-      showContextMenu(dummyEvent, items);
+      showContextMenu(dummyEvent, items, () => {
+        sendOpponentCharacterToBench(slotIndex);
+      });
       return;
     }
     sendOpponentCharacterToBench(slotIndex);
@@ -21712,7 +22101,9 @@ function resolveOpponentStandardDestructionBase(slotIndex) {
       }
 
       const dummyEvent = { clientX: window.innerWidth / 2 - 120, clientY: window.innerHeight / 2 - 80 };
-      showContextMenu(dummyEvent, items);
+      showContextMenu(dummyEvent, items, () => {
+        loseOpponentSingleSkill(slotIndex, unicaSkillId);
+      });
     } else {
       loseOpponentSingleSkill(slotIndex, unicaSkillId);
     }
@@ -21805,7 +22196,9 @@ function resolveOpponentStandardDestructionBase(slotIndex) {
         action: doChooseOpponentSkillToLose
       });
       const dummyEvent = { clientX: window.innerWidth / 2 - 120, clientY: window.innerHeight / 2 - 80 };
-      showContextMenu(dummyEvent, items);
+      showContextMenu(dummyEvent, items, () => {
+        doChooseOpponentSkillToLose();
+      });
     }
   }
 }
@@ -21882,7 +22275,9 @@ function resolveStandardDestruction(slotIndex) {
       }
     ];
     const dummyEvent = { clientX: window.innerWidth / 2 - 120, clientY: window.innerHeight / 2 - 80 };
-    showContextMenu(dummyEvent, items);
+    showContextMenu(dummyEvent, items, () => {
+      proceedAfterPlayerGuardaSiniestra(slotIndex);
+    });
     return;
   }
 
@@ -21919,7 +22314,9 @@ function proceedAfterPlayerGuardaSiniestra(slotIndex) {
       }
     ];
     const dummyEvent = { clientX: window.innerWidth / 2 - 120, clientY: window.innerHeight / 2 - 80 };
-    showContextMenu(dummyEvent, items);
+    showContextMenu(dummyEvent, items, () => {
+      resolveStandardDestructionNoEludir(slotIndex);
+    });
     return;
   }
 
@@ -21950,7 +22347,9 @@ function proceedAfterPlayerGuardaSiniestra(slotIndex) {
       }
     ];
     const dummyEvent = { clientX: window.innerWidth / 2 - 120, clientY: window.innerHeight / 2 - 80 };
-    showContextMenu(dummyEvent, items);
+    showContextMenu(dummyEvent, items, () => {
+      proceedAfterPlayerEishetBenchSP348(slotIndex);
+    });
     return;
   }
 
@@ -21987,7 +22386,9 @@ function proceedAfterPlayerEishetBenchSP348(slotIndex) {
       }
     ];
     const dummyEvent = { clientX: window.innerWidth / 2 - 120, clientY: window.innerHeight / 2 - 80 };
-    showContextMenu(dummyEvent, items);
+    showContextMenu(dummyEvent, items, () => {
+      resolveStandardDestructionNoEludir(slotIndex);
+    });
     return;
   }
 
@@ -22104,7 +22505,9 @@ function resolveStandardDestructionNoCircuitoAzul(slotIndex) {
       }
     ];
     const dummyEvent = { clientX: window.innerWidth / 2 - 120, clientY: window.innerHeight / 2 - 80 };
-    showContextMenu(dummyEvent, items);
+    showContextMenu(dummyEvent, items, () => {
+      resolveStandardDestructionNoEludirBase(slotIndex);
+    });
     return;
   }
 
@@ -22117,7 +22520,6 @@ function resolveStandardDestructionNoEludirBase(slotIndex) {
 
   const charCard = cardsDatabase[slot.character];
   const isSkillHandBlocked = typeof isSkillHandEffectBlocked === 'function' && isSkillHandEffectBlocked('player');
-  const tieneResistirEnMano = playtestState.hand.includes('BBX-SP060') && !isSkillHandBlocked;
   const tieneMuroEquipado = slot.skills.includes('BBX-SP002');
   const cantSkills = slot.skills.length;
 
@@ -22252,7 +22654,7 @@ function resolveStandardDestructionNoEludirBase(slotIndex) {
       !(typeof isCardGraveEffectBlocked === 'function' && isCardGraveEffectBlocked('player', 'BBX-SP408')) &&
       !(typeof isSkillEffectBlocked === 'function' && isSkillEffectBlocked('BBX-SP408', 'player'));
 
-    if (canUseTenacidad || tieneResistirEnMano || canUseKatshiBench || canUseBarrera || canUseEishetBench || canUseTorbellinoSP408) {
+    if (canUseTenacidad || canUseKatshiBench || canUseBarrera || canUseEishetBench || canUseTorbellinoSP408) {
       const items = [
         {
           text: `💥 Recibir ataque (Enviar a Banca)`,
@@ -22302,21 +22704,6 @@ function resolveStandardDestructionNoEludirBase(slotIndex) {
         });
       }
 
-      if (tieneResistirEnMano) {
-        items.push({
-          text: `✊ Activar "Resistir" desde la Mano (Equipar y Salvar)`,
-          action: () => {
-            const idx = playtestState.hand.indexOf('BBX-SP060');
-            if (idx !== -1) {
-              playtestState.hand.splice(idx, 1);
-              slot.skills.push('BBX-SP060');
-              addLog(`[Efecto Mano] Activaste <strong>Resistir</strong> desde tu mano y se la equipaste a <strong>${charCard.nombre}</strong> para evitar su derrota.`, 'var(--accent-cyan)');
-              updatePlaytestView();
-            }
-          }
-        });
-      }
-
       if (canUseTenacidad) {
         items.push({
           text: '✊ Activar "Tenacidad implacable" desde el Cementerio (Equipar y reanudar batalla)',
@@ -22338,7 +22725,9 @@ function resolveStandardDestructionNoEludirBase(slotIndex) {
       }
 
       const dummyEvent = { clientX: window.innerWidth / 2 - 120, clientY: window.innerHeight / 2 - 80 };
-      showContextMenu(dummyEvent, items);
+      showContextMenu(dummyEvent, items, () => {
+        sendCharacterToBench(slotIndex);
+      });
     } else {
       sendCharacterToBench(slotIndex);
     }
@@ -22353,7 +22742,7 @@ function resolveStandardDestructionNoEludirBase(slotIndex) {
     const tieneExplosionTruenoEnCementerio = playtestState.grave.includes('BBX-SP021');
     const puedeActivarPandilla = tienePandillaEquipada && tieneExplosionTruenoEnCementerio && !isPuntoDeControlActive();
 
-    if (tieneResistirEnMano || puedeActivarPandilla || canUseBarrera || puedeActivarEspejismo) {
+    if (puedeActivarPandilla || canUseBarrera || puedeActivarEspejismo) {
       const items = [
         {
           text: `💥 Perder Skill "${unicaSkillCard.nombre}" en combate`,
@@ -22381,21 +22770,6 @@ function resolveStandardDestructionNoEludirBase(slotIndex) {
         });
       }
 
-      if (tieneResistirEnMano) {
-        items.push({
-          text: "✊ Activar \"Resistir\" desde la Mano (Equipar y Salvar)",
-          action: () => {
-            const idx = playtestState.hand.indexOf('BBX-SP060');
-            if (idx !== -1) {
-              playtestState.hand.splice(idx, 1);
-              slot.skills.push('BBX-SP060');
-              addLog(`[Efecto Mano] Activaste <strong>Resistir</strong> desde tu mano y se la equipaste a <strong>${charCard.nombre}</strong>.`, 'var(--accent-cyan)');
-              updatePlaytestView();
-            }
-          }
-        });
-      }
-
       if (puedeActivarPandilla) {
         items.push({
           text: "✊ Activar \"Pandilla\" (Barajar \"¡Explosión trueno!\" y Salvar)",
@@ -22413,7 +22787,9 @@ function resolveStandardDestructionNoEludirBase(slotIndex) {
       }
 
       const dummyEvent = { clientX: window.innerWidth / 2 - 120, clientY: window.innerHeight / 2 - 80 };
-      showContextMenu(dummyEvent, items);
+      showContextMenu(dummyEvent, items, () => {
+        loseSingleSkill(slotIndex, unicaSkillId);
+      });
     } else {
       loseSingleSkill(slotIndex, unicaSkillId);
     }
@@ -22495,21 +22871,6 @@ function resolveStandardDestructionNoEludirBase(slotIndex) {
       }
     ];
 
-    if (tieneResistirEnMano) {
-      items.push({
-        text: "✊ Activar \"Resistir\" desde la Mano (Equipar y Salvar)",
-        action: () => {
-          const idx = playtestState.hand.indexOf('BBX-SP060');
-          if (idx !== -1) {
-            playtestState.hand.splice(idx, 1);
-            slot.skills.push('BBX-SP060');
-            addLog(`[Efecto Mano] Activaste <strong>Resistir</strong> desde tu mano y se la equipaste a <strong>${charCard.nombre}</strong>.`, 'var(--accent-cyan)');
-            updatePlaytestView();
-          }
-        }
-      });
-    }
-
     if (puedeActivarPandilla) {
       items.push({
         text: "✊ Activar \"Pandilla\" (Barajar \"¡Explosión trueno!\" y Salvar)",
@@ -22549,7 +22910,9 @@ function resolveStandardDestructionNoEludirBase(slotIndex) {
       items[0].action();
     } else {
       const dummyEvent = { clientX: window.innerWidth / 2 - 120, clientY: window.innerHeight / 2 - 80 };
-      showContextMenu(dummyEvent, items);
+      showContextMenu(dummyEvent, items, () => {
+        items[0].action();
+      });
     }
   }
 }
@@ -22679,9 +23042,7 @@ function checkMatchEndCondition() {
     if (typeof adjustBo3Score === 'function') {
       adjustBo3Score('victories', 1);
     }
-    if (typeof alert === 'function') {
-      alert(`🏆 ¡VICTORIA!\n\nLa banca del rival ha acumulado 3 personajes derrotados (${oppBenchLen}/3).\n¡Has ganado la partida!\n\n(En Skill Blast X la banca representa la vida del jugador: al caer el 3er personaje a la banca, se pierde el duelo).`);
-    }
+    showMatchEndModal(true, "¡VICTORIA!", `La banca del rival ha acumulado 3 personajes derrotados (${oppBenchLen}/3).\n¡Has ganado el duelo!`);
     updatePlaytestView();
     return { ended: true, winner: 'player' };
   }
@@ -22692,16 +23053,85 @@ function checkMatchEndCondition() {
     if (typeof adjustBo3Score === 'function') {
       adjustBo3Score('defeats', 1);
     }
-    if (typeof alert === 'function') {
-      alert(`❌ DERROTA\n\nTu banca ha acumulado 3 personajes derrotados (${playerBenchLen}/3).\n¡Has perdido la partida!\n\n(En Skill Blast X la banca representa la vida del jugador: al caer el 3er personaje a la banca, se pierde el duelo).`);
-    }
+    showMatchEndModal(false, "DERROTA", `Tu banca ha acumulado 3 personajes derrotados (${playerBenchLen}/3).\n¡Has perdido el duelo!`);
     updatePlaytestView();
     return { ended: true, winner: 'opponent' };
   }
 
   return { ended: false };
 }
-if (typeof window !== 'undefined') window.checkMatchEndCondition = checkMatchEndCondition;
+
+function showMatchEndModal(isVictory, title, subtitle) {
+  const modal = document.getElementById('match-end-modal');
+  if (!modal) {
+    if (typeof alert === 'function') {
+      alert(`${title}\n\n${subtitle}`);
+    }
+    return;
+  }
+  const iconEl = document.getElementById('match-end-icon');
+  const titleEl = document.getElementById('match-end-title');
+  const subtitleEl = document.getElementById('match-end-subtitle');
+
+  if (iconEl) iconEl.textContent = isVictory ? "🏆" : "❌";
+  if (titleEl) {
+    titleEl.textContent = title;
+    titleEl.style.color = isVictory ? "var(--accent-cyan)" : "var(--accent-danger)";
+  }
+  if (subtitleEl) subtitleEl.textContent = subtitle;
+
+  modal.classList.remove('hidden');
+}
+
+function closeMatchEndModal() {
+  const modal = document.getElementById('match-end-modal');
+  if (modal) modal.classList.add('hidden');
+}
+
+function exitToMainMenuAfterMatch() {
+  closeMatchEndModal();
+  if (typeof playtestState !== 'undefined' && playtestState.isOnlineMatch && typeof MultiplayerEngine !== 'undefined') {
+    try {
+      if (MultiplayerEngine.isConnected()) {
+        MultiplayerEngine.cancelRoom();
+      }
+    } catch (e) {
+      console.warn("Error desconectando multijugador:", e);
+    }
+  }
+  showScreen('main-menu');
+}
+
+function surrenderMatch() {
+  if (!playtestState) return;
+  if (playtestState.matchEnded) {
+    showMatchEndModal(false, "PARTIDA CONCLUIDA", "La partida ya ha finalizado.");
+    return;
+  }
+  const wantsSurrender = confirm("¿Estás seguro de que deseas rendirte? Concederás la victoria a tu oponente.");
+  if (!wantsSurrender) return;
+
+  if (playtestState.isOnlineMatch && typeof MultiplayerEngine !== 'undefined' && MultiplayerEngine.isConnected()) {
+    try {
+      MultiplayerEngine.sendPacket({ type: 'ACTION_SURRENDER' });
+    } catch (e) {}
+  }
+
+  playtestState.matchEnded = true;
+  addLog("🏳️ Te has rendido del duelo.", 'var(--accent-danger)');
+  if (typeof adjustBo3Score === 'function') {
+    adjustBo3Score('defeats', 1);
+  }
+  showMatchEndModal(false, "DERROTA", "Te has rendido de la partida.");
+}
+
+if (typeof window !== 'undefined') {
+  window.checkMatchEndCondition = checkMatchEndCondition;
+  window.showMatchEndModal = showMatchEndModal;
+  window.closeMatchEndModal = closeMatchEndModal;
+  window.exitToMainMenuAfterMatch = exitToMainMenuAfterMatch;
+  window.surrenderMatch = surrenderMatch;
+}
 
 function checkAndTriggerMarinaHandBattle() {
   if (playtestState.turnOwner !== 'opponent') return;
@@ -24324,11 +24754,25 @@ function activateSkillFieldEffect(slotIndex, skillId, skIndex) {
 
   const charCard = cardsDatabase[slot.character];
   const skCard = cardsDatabase[skillId];
+  if (skIndex === undefined || skIndex === null || skIndex === -1) {
+    skIndex = slot.skills.findIndex((sid, idx) => sid === skillId && !(slot.usedSkillIndexes || []).includes(idx));
+    if (skIndex === -1) skIndex = slot.skills.indexOf(skillId);
+  }
 
   slot.usedSkills = slot.usedSkills || [];
-  if (skillId !== 'BBX-SP240' && skillId !== 'BBX-SP365' && slot.usedSkills.includes(skillId)) {
-    alert("Este efecto de Skill ya se usó este turno.");
-    return;
+  slot.usedSkillIndexes = slot.usedSkillIndexes || [];
+
+  if (skillId !== 'BBX-SP240' && skillId !== 'BBX-SP365') {
+    const isUsed = (typeof isEquippedSkillUsed === 'function')
+      ? isEquippedSkillUsed(slot, skillId, skIndex, 'player')
+      : ((typeof window !== 'undefined' && typeof window.isEquippedSkillUsed === 'function')
+        ? window.isEquippedSkillUsed(slot, skillId, skIndex, 'player')
+        : (slot.usedSkillIndexes.includes(skIndex) || (slot.usedSkills.filter(id => id === skillId).length >= slot.skills.filter(id => id === skillId).length)));
+
+    if (isUsed) {
+      alert("Este efecto de Skill ya se usó este turno.");
+      return;
+    }
   }
 
   if (typeof isSkillBlockedByContratoSP419 === 'function' && isSkillBlockedByContratoSP419(skillId, 'effect')) {
@@ -27895,15 +28339,23 @@ function activateSkillFieldEffect(slotIndex, skillId, skIndex) {
       const selected = targetableSkills[chosenIdx];
 
       if (!slot.usedSkillIndexes) slot.usedSkillIndexes = [];
-      slot.usedSkillIndexes.push(skIndex);
+      if (!slot.usedSkillIndexes.includes(skIndex)) {
+        slot.usedSkillIndexes.push(skIndex);
+      }
       slot.usedSkills.push(skillId);
 
       if (selected.owner === 'player') {
         const pSlot = playtestState.slots[selected.slotIndex];
         if (pSlot && pSlot.skills) {
-          const realIdx = pSlot.skills.indexOf(selected.id);
-          if (realIdx !== -1) {
-            const removedId = pSlot.skills.splice(realIdx, 1)[0];
+          let targetSkillIdx = selected.skillIndex;
+          if (pSlot.skills[targetSkillIdx] !== selected.id) {
+            targetSkillIdx = pSlot.skills.indexOf(selected.id);
+          }
+          if (targetSkillIdx !== -1) {
+            const removeFn = (typeof removeSkillFromSlotByIndex === 'function')
+              ? removeSkillFromSlotByIndex
+              : ((typeof window !== 'undefined' && typeof window.removeSkillFromSlotByIndex === 'function') ? window.removeSkillFromSlotByIndex : null);
+            const removedId = removeFn ? removeFn(pSlot, targetSkillIdx) : pSlot.skills.splice(targetSkillIdx, 1)[0];
             playtestState.grave.push(removedId);
             addLog(`[Efecto Resplandor certero] Con Helica en banca, enviaste al cementerio tu Skill portada <strong>${cardsDatabase[removedId].nombre}</strong>.`, 'var(--accent-purple)');
 
@@ -27919,15 +28371,22 @@ function activateSkillFieldEffect(slotIndex, skillId, skIndex) {
             checkAndTriggerTorbellino(removedId, true);
           }
         }
+        updatePlaytestView();
       } else {
         checkAndProtectSendSkillsToGrave('opponent', () => {
           updatePlaytestView();
         }, () => {
           const oSlot = playtestState.opponentSlots[selected.slotIndex];
           if (oSlot && oSlot.skills) {
-            const realIdx = oSlot.skills.indexOf(selected.id);
-            if (realIdx !== -1) {
-              const removedId = oSlot.skills.splice(realIdx, 1)[0];
+            let targetSkillIdx = selected.skillIndex;
+            if (oSlot.skills[targetSkillIdx] !== selected.id) {
+              targetSkillIdx = oSlot.skills.indexOf(selected.id);
+            }
+            if (targetSkillIdx !== -1) {
+              const removeFn = (typeof removeSkillFromSlotByIndex === 'function')
+                ? removeSkillFromSlotByIndex
+                : ((typeof window !== 'undefined' && typeof window.removeSkillFromSlotByIndex === 'function') ? window.removeSkillFromSlotByIndex : null);
+              const removedId = removeFn ? removeFn(oSlot, targetSkillIdx) : oSlot.skills.splice(targetSkillIdx, 1)[0];
               playtestState.opponentGrave.push(removedId);
               addLog(`[Efecto Resplandor certero] Con Helica en banca, enviaste al cementerio la Skill portada del adversario <strong>${cardsDatabase[removedId].nombre}</strong>.`, 'var(--accent-purple)');
               checkAndTriggerTorbellinoOpponent(removedId, true);
@@ -29981,6 +30440,10 @@ function activateSkillFieldEffect(slotIndex, skillId, skIndex) {
       alert("Solo puedes usar el efecto de '¡Voluntad!' una vez por turno.");
       return;
     }
+    if (playtestState.cannotDrawByEffectsThisTurn || (typeof isDrawBySkillBlocked === 'function' && isDrawBySkillBlocked('player'))) {
+      alert("No puedes activar '¡Voluntad!': no puedes robar más cartas por efectos por el resto de este turno.");
+      return;
+    }
     
     if (playtestState.deck.length === 0) {
       alert("Tu mazo está vacío, no puedes robar.");
@@ -31283,14 +31746,25 @@ function checkCuentaAtrasOrProceed(nextCallback) {
 
   const remaining = [];
   const triggered = [];
+  const currentTurn = playtestState.turnCount || 1;
 
   playtestState.cuentaAtrasList.forEach(cd => {
-    cd.turnsElapsed = (cd.turnsElapsed || 0) + 1;
+    if (!playtestState.isOnlineMatch || cd.lastIncrementedTurn !== currentTurn) {
+      cd.turnsElapsed = (cd.turnsElapsed || 0) + 1;
+      cd.lastIncrementedTurn = currentTurn;
+    }
     if (cd.turnsElapsed >= (cd.targetTurns || 10)) {
-      triggered.push(cd);
+      if (playtestState.isOnlineMatch && cd.activator === 'player') {
+        // El rival es quien debe elegir 1 Personaje propio para mandar a su banca cuando reciba el estado / fin de turno
+        remaining.push(cd);
+      } else {
+        triggered.push(cd);
+      }
     } else {
       remaining.push(cd);
-      addLog(`⏳ [Cuenta atrás BBX-SP301] Fin del turno: el contador de Cuenta atrás (${cd.activator === 'player' ? 'Jugador' : 'Rival'}) pasa a <strong>${cd.turnsElapsed}/${cd.targetTurns || 10}</strong>.`, 'var(--accent-cyan)');
+      if (!playtestState.isOnlineMatch || playtestState.turnOwner === 'player') {
+        addLog(`⏳ [Cuenta atrás BBX-SP301] Fin del turno: el contador de Cuenta atrás (${cd.activator === 'player' ? 'Jugador' : 'Rival'}) pasa a <strong>${cd.turnsElapsed}/${cd.targetTurns || 10}</strong>.`, 'var(--accent-cyan)');
+      }
     }
   });
 
@@ -31352,7 +31826,7 @@ function checkRoy339OrProceed(nextCallback) {
   }
 
   // 2. Resolver búsqueda pendiente del Rival
-  if (playtestState.pendingRoy339SearchOpponent && playtestState.pendingRoy339SearchOpponent > 0) {
+  if (!playtestState.isOnlineMatch && playtestState.pendingRoy339SearchOpponent && playtestState.pendingRoy339SearchOpponent > 0) {
     playtestState.pendingRoy339SearchOpponent--;
     const isRoyTarget = id => {
       const c = cardsDatabase[id];
@@ -31394,7 +31868,16 @@ function checkPlanificar342OrProceed(nextCallback) {
     return;
   }
 
-  const item = playtestState.pendingPlanificar342List.shift();
+  let itemIdx = 0;
+  if (playtestState.isOnlineMatch) {
+    itemIdx = playtestState.pendingPlanificar342List.findIndex(it => it && it.owner === 'player');
+    if (itemIdx === -1) {
+      nextCallback();
+      return;
+    }
+  }
+
+  const item = playtestState.pendingPlanificar342List.splice(itemIdx, 1)[0];
   const isPlayer = item.owner === 'player';
   const slots = isPlayer ? playtestState.slots : playtestState.opponentSlots;
   const targetSlot = slots[item.slotIndex];
@@ -39001,7 +39484,7 @@ function rollDice(onFinish) {
 }
 
 // Lanzar moneda (Cara o Sello) con animación 3D
-function flipCoin(onFinish, forcedResult = null) {
+function flipCoin(onFinish, forcedResult = null, options = null) {
   const overlay = document.getElementById('coin-overlay');
   const title = document.getElementById('coin-title-text');
   const throwContainer = document.getElementById('coin-throw-container');
@@ -39015,7 +39498,7 @@ function flipCoin(onFinish, forcedResult = null) {
     return;
   }
 
-  title.textContent = "🪙 ¡Lanzando moneda! 🪙";
+  title.textContent = (options && options.initialText) ? options.initialText : "🪙 ¡Lanzando moneda! 🪙";
   disc.style.transform = '';
   disc.className = 'coin-disc flipping';
 
@@ -39028,7 +39511,11 @@ function flipCoin(onFinish, forcedResult = null) {
   setTimeout(() => {
     disc.classList.remove('flipping');
     disc.style.transform = isCara ? 'rotateY(0deg)' : 'rotateY(180deg)';
-    title.textContent = isCara ? "👑 ¡Resultado: CARA! 👑" : "🛡️ ¡Resultado: SELLO! 🛡️";
+    if (options && options.winnerText) {
+      title.textContent = options.winnerText;
+    } else {
+      title.textContent = isCara ? "👑 ¡Resultado: CARA! 👑" : "🛡️ ¡Resultado: SELLO! 🛡️";
+    }
   }, 1000);
 
   setTimeout(() => {
@@ -40821,7 +41308,7 @@ function checkRecursosSP404OrProceed(nextCallback) {
     checkAndTriggerRecursosSP404('player', {}, () => {
       proceed();
     });
-  } else if (currentTurnOwner === 'player') {
+  } else if (currentTurnOwner === 'player' && !playtestState.isOnlineMatch) {
     // Si el turno que finaliza es del jugador, el rival comprueba Recursos
     checkAndTriggerRecursosSP404('opponent', {}, () => {
       proceed();
@@ -41198,6 +41685,11 @@ function checkAndProtectShuffleSkillByRyuChan(targetOwner, onCancel, onProceed, 
       return;
     }
 
+    if (playtestState.isOnlineMatch && typeof MultiplayerEngine !== 'undefined' && MultiplayerEngine.isConnected() && typeof MultiplayerEngine.requestProtectionDecision === 'function') {
+      MultiplayerEngine.requestProtectionDecision('shuffle_to_deck', count, totalCards, onCancel, onProceed);
+      return;
+    }
+
     const items = [];
 
     if (oppHasCandidez) {
@@ -41483,6 +41975,11 @@ function checkAndProtectSendSkillsToGrave(targetOwner, onCancel, onProceed, coun
 
     if (!oppHasNara && !oppHasDobleImpetu && !oppHasLyna && !oppHasBarrera) {
       if (onProceed) onProceed();
+      return;
+    }
+
+    if (playtestState.isOnlineMatch && typeof MultiplayerEngine !== 'undefined' && MultiplayerEngine.isConnected() && typeof MultiplayerEngine.requestProtectionDecision === 'function') {
+      MultiplayerEngine.requestProtectionDecision('send_to_grave', count, totalCards, onCancel, onProceed);
       return;
     }
 
@@ -42042,6 +42539,14 @@ function checkAndTriggerMarinaSP343(onDone = null) {
 
   const checkOpponent = () => {
     if (opponentCanActivate && playtestState.opponentHand.includes('BBX-SP343')) {
+      if (playtestState.isOnlineMatch) {
+        if (typeof MultiplayerEngine !== 'undefined' && MultiplayerEngine.isConnected() && typeof MultiplayerEngine.sendReactionTriggerToPeer === 'function') {
+          MultiplayerEngine.sendReactionTriggerToPeer('MARINA_SP343', {}, onDone);
+        } else if (typeof onDone === 'function') {
+          onDone();
+        }
+        return;
+      }
       const oppItems = [
         {
           text: "⚡ [RIVAL] Activar Marina (SP343) en Mano (Barajar hasta 2 cartas de tu cementerio a tu deck)",
@@ -45549,7 +46054,9 @@ function checkAndTriggerHelicaBenchSP335(defenderOwner, defenderSlot, onContinue
       }
     ];
     const dummyEvent = { clientX: window.innerWidth / 2 - 140, clientY: window.innerHeight / 2 - 80 };
-    showContextMenu(dummyEvent, items);
+    showContextMenu(dummyEvent, items, () => {
+      onContinue();
+    });
   } else {
     const items = [
       {
@@ -45566,7 +46073,9 @@ function checkAndTriggerHelicaBenchSP335(defenderOwner, defenderSlot, onContinue
       }
     ];
     const dummyEvent = { clientX: window.innerWidth / 2 - 140, clientY: window.innerHeight / 2 - 80 };
-    showContextMenu(dummyEvent, items);
+    showContextMenu(dummyEvent, items, () => {
+      onContinue();
+    });
   }
 }
 
@@ -45649,7 +46158,9 @@ function checkAndTriggerAlterarPacto(targetOwner, targetSlot, onContinue) {
       }
     ];
     const dummyEvent = { clientX: window.innerWidth / 2 - 140, clientY: window.innerHeight / 2 - 80 };
-    showContextMenu(dummyEvent, items);
+    showContextMenu(dummyEvent, items, () => {
+      onContinue();
+    });
   } else {
     if (isSkillEffectBlocked('BBX-SP309', 'opponent', targetSlot)) {
       onContinue();
@@ -45715,7 +46226,9 @@ function checkAndTriggerAlterarPacto(targetOwner, targetSlot, onContinue) {
       }
     ];
     const dummyEvent = { clientX: window.innerWidth / 2 - 140, clientY: window.innerHeight / 2 - 80 };
-    showContextMenu(dummyEvent, items);
+    showContextMenu(dummyEvent, items, () => {
+      onContinue();
+    });
   }
 }
 
@@ -45882,7 +46395,7 @@ function checkAndTriggerKatshiHandSP344(defenderOwner, defenderSlot, onContinue)
           action: () => portToTargetChar(c)
         }));
         const dummyEvent2 = { clientX: window.innerWidth / 2 - 120, clientY: window.innerHeight / 2 - 80 };
-        showContextMenu(dummyEvent2, charItems);
+        showContextMenu(dummyEvent2, charItems, () => onContinue());
       }
     });
   };
@@ -45904,7 +46417,7 @@ function checkAndTriggerKatshiHandSP344(defenderOwner, defenderSlot, onContinue)
     ];
     addLog(`[Trigger Katshi BBX-SP344] Tu Personaje Katshi (<strong>${defCard.nombre}</strong>) es objetivo de un ataque. Puedes activar a <strong>Katshi (SP344)</strong> desde tu mano.`, 'var(--accent-cyan)');
     const dummyEvent = { clientX: window.innerWidth / 2 - 140, clientY: window.innerHeight / 2 - 80 };
-    showContextMenu(dummyEvent, items);
+    showContextMenu(dummyEvent, items, () => onContinue());
   } else {
     const items = [
       {
@@ -45921,7 +46434,7 @@ function checkAndTriggerKatshiHandSP344(defenderOwner, defenderSlot, onContinue)
     ];
     addLog(`[Trigger Katshi BBX-SP344 Rival] El Personaje Katshi rival (<strong>${defCard.nombre}</strong>) es objetivo de un ataque. El rival puede activar a <strong>Katshi (SP344)</strong> desde su mano.`, 'var(--accent-cyan)');
     const dummyEvent = { clientX: window.innerWidth / 2 - 140, clientY: window.innerHeight / 2 - 80 };
-    showContextMenu(dummyEvent, items);
+    showContextMenu(dummyEvent, items, () => onContinue());
   }
 }
 
@@ -46052,7 +46565,7 @@ function checkAndTriggerDobleColisionSP409(attackerOwner, targetSlot, onContinue
         action: () => executeEquip(fromZone, c)
       }));
       const dummyEvent2 = { clientX: window.innerWidth / 2 - 120, clientY: window.innerHeight / 2 - 80 };
-      showContextMenu(dummyEvent2, charItems);
+      showContextMenu(dummyEvent2, charItems, () => proceed());
     }
   };
 
@@ -46084,7 +46597,7 @@ function checkAndTriggerDobleColisionSP409(attackerOwner, targetSlot, onContinue
         }
       ];
       const dummyEvent = { clientX: window.innerWidth / 2 - 120, clientY: window.innerHeight / 2 - 80 };
-      showContextMenu(dummyEvent, itemsZone);
+      showContextMenu(dummyEvent, itemsZone, () => proceed());
     }
   };
 
@@ -46113,7 +46626,7 @@ function checkAndTriggerDobleColisionSP409(attackerOwner, targetSlot, onContinue
 
   addLog(`${tag} El adversario controla 2 o más Personajes y declaró un ataque. Puedes activar <strong>Doble colisión</strong>.`, 'var(--accent-cyan)');
   const dummyEvent = { clientX: window.innerWidth / 2 - 140, clientY: window.innerHeight / 2 - 80 };
-  showContextMenu(dummyEvent, items);
+  showContextMenu(dummyEvent, items, () => proceed());
 }
 
 if (typeof window !== 'undefined') {
@@ -46256,6 +46769,14 @@ function checkAndTriggerMarinaSP410(skillId, sourceOwner = 'opponent', skillOwne
     const dummyEvent = { clientX: window.innerWidth / 2 - 140, clientY: window.innerHeight / 2 - 80 };
     showContextMenu(dummyEvent, items);
   } else {
+    if (playtestState.isOnlineMatch) {
+      if (typeof MultiplayerEngine !== 'undefined' && MultiplayerEngine.isConnected() && typeof MultiplayerEngine.sendReactionTriggerToPeer === 'function') {
+        MultiplayerEngine.sendReactionTriggerToPeer('MARINA_SP410', { skillId }, onDone);
+      } else if (typeof onDone === 'function') {
+        onDone(false, { reason: 'online_skipped' });
+      }
+      return;
+    }
     addLog(`[Trigger Marina BBX-SP410 Rival] Una Skill fue enviada al cementerio del rival por efecto de tu carta: el rival baraja <strong>${skillCard.nombre}</strong> al deck y roba 1 carta.`, 'var(--accent-cyan)');
     executeActivation();
   }
@@ -46675,7 +47196,7 @@ function activateOpponentControlDelPensar(slotIndex, skIndex) {
 }
 
 // Bao (BBX-SP356): "Mientras esta carta se encuentre en el cementerio, cada vez que una Skill es enviada al cementerio por el efecto de \"Control del pensar\", puedes enviar 1 Skill portada al cementerio."
-function checkAndTriggerBaoSP356(callback) {
+function checkAndTriggerBaoSP356(callback, onlyLocalPlayer = false) {
   const getBaoTargetableSkills = (activatorOwner) => {
     const list = [];
     playtestState.slots.forEach((s, sIdx) => {
@@ -46730,20 +47251,30 @@ function checkAndTriggerBaoSP356(callback) {
 
   const oppBaoCount = playtestState.opponentGrave.filter(id => id === 'BBX-SP356').length;
   const isOppGraveBlocked = typeof isCardGraveEffectBlocked === 'function' && isCardGraveEffectBlocked('opponent', 'BBX-SP356');
-  if (!isOppGraveBlocked && oppBaoCount > 0) {
+  const shouldDelegateOppBaoOnline = !onlyLocalPlayer && playtestState.isOnlineMatch && typeof MultiplayerEngine !== 'undefined' && MultiplayerEngine.isConnected() && typeof MultiplayerEngine.sendReactionTriggerToPeer === 'function';
+  if (!onlyLocalPlayer && !shouldDelegateOppBaoOnline && !isOppGraveBlocked && oppBaoCount > 0) {
     for (let i = 0; i < oppBaoCount; i++) {
       queue.push({ owner: 'opponent', copyNumber: i + 1, total: oppBaoCount });
     }
   }
 
-  if (queue.length === 0) {
+  const finishAllBao = () => {
+    if (shouldDelegateOppBaoOnline && !isOppGraveBlocked && oppBaoCount > 0) {
+      updatePlaytestView();
+      MultiplayerEngine.sendReactionTriggerToPeer('BAO_SP356', {}, callback);
+      return;
+    }
     if (typeof callback === 'function') callback();
+  };
+
+  if (queue.length === 0) {
+    finishAllBao();
     return;
   }
 
   const processNextTrigger = (qIndex) => {
     if (qIndex >= queue.length) {
-      if (typeof callback === 'function') callback();
+      finishAllBao();
       return;
     }
 
@@ -46878,7 +47409,7 @@ function checkAndTriggerEishetSP357(victimOwner = 'player', onDone = null) {
   const isHandBlocked = typeof isCharacterHandEffectBlocked === 'function' && isCharacterHandEffectBlocked(activatorOwner);
   // Requisito estricto: como mínimo 2 cartas en tu deck para poder robar las 2 cartas
   const has2CardsInDeck = deck.length >= 2;
-  const isDrawBlocked = isPlayerVictim ? !!playtestState.cannotDrawByEffectsThisTurn : false;
+  const isDrawBlocked = isPlayerVictim ? !!playtestState.cannotDrawByEffectsThisTurn : !!playtestState.opponentCannotDrawByEffectsThisTurn;
 
   if (!hasEishetInHand || isHandBlocked || !has2CardsInDeck || isDrawBlocked) {
     if (typeof onDone === 'function') onDone();
@@ -46905,6 +47436,11 @@ function checkAndTriggerEishetSP357(victimOwner = 'player', onDone = null) {
     const dummyEvent = { clientX: window.innerWidth / 2 - 150, clientY: window.innerHeight / 2 - 80 };
     showContextMenu(dummyEvent, items);
   } else {
+    if (playtestState.isOnlineMatch && typeof MultiplayerEngine !== 'undefined' && MultiplayerEngine.isConnected() && typeof MultiplayerEngine.sendReactionTriggerToPeer === 'function') {
+      updatePlaytestView();
+      MultiplayerEngine.sendReactionTriggerToPeer('EISHET_SP357', {}, onDone);
+      return;
+    }
     const oppItems = [
       {
         text: "⚡ [RIVAL] Activar Eishet (SP357): Enviar al cementerio y robar 2 cartas de su deck",
@@ -52264,6 +52800,10 @@ function checkNaraSP392OrProceed(nextCallback) {
   const canPlayerActivate = (playtestState.hand || []).includes('BBX-SP392') && !isPlayerHandBlocked && oppCanDraw && playerTargets.length > 0;
 
   const checkOpponentNara = () => {
+    if (playtestState.isOnlineMatch) {
+      proceed();
+      return;
+    }
     const isOppHandBlocked = typeof isCharacterHandEffectBlocked === 'function' && isCharacterHandEffectBlocked('opponent');
     const isPlayerDrawBlocked = playtestState.cannotDrawByEffectsThisTurn || (typeof isDrawByCharacterBlocked === 'function' && isDrawByCharacterBlocked('player', 1));
     const playerCanDraw = playtestState.deck && playtestState.deck.length >= 1 && !isPlayerDrawBlocked;
@@ -53360,6 +53900,9 @@ function checkAndTriggerCorrienteEsmeraldaSP394(lostSkillId, owner = 'player', t
 function onEquippedSkillSentToGraveByEffect(skillId, slotOwner = 'player', sourceOwner = 'player') {
   if (typeof dispatchGraveTriggers === 'function') {
     dispatchGraveTriggers(skillId, slotOwner, { isEquipped: true, sourceOwner, byEffect: true });
+    if (sourceOwner !== slotOwner && typeof checkAndTriggerMarinaSP410 === 'function') {
+      checkAndTriggerMarinaSP410(skillId, sourceOwner, slotOwner);
+    }
     return;
   }
   if (slotOwner === 'player') {
@@ -56792,6 +57335,11 @@ function notifyCharacterPlayedDirectlyFromDeck(playedByOwner = 'opponent', playe
       showContextMenu(dummyEvent, items);
     }
   } else {
+    if (playtestState.isOnlineMatch && typeof MultiplayerEngine !== 'undefined' && MultiplayerEngine.isConnected() && typeof MultiplayerEngine.sendReactionTriggerToPeer === 'function') {
+      if (typeof updatePlaytestView === 'function') updatePlaytestView();
+      MultiplayerEngine.sendReactionTriggerToPeer('DUALIDAD_SP428', { slotIndex, playedCharId }, onContinue);
+      return;
+    }
     // Rival / IA
     const items = [
       {
@@ -58361,5 +58909,6 @@ if (typeof window !== 'undefined') {
   window.updateTurnBadgeUI = updateTurnBadgeUI;
   window.toggleTurnOwner = toggleTurnOwner;
   window.proceedToNextTurn = proceedToNextTurn;
+  window.endCurrentTurn = endCurrentTurn;
   window.exitGame = exitGame;
 }

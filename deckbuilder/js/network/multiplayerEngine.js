@@ -24,11 +24,17 @@ const MultiplayerEngine = (() => {
   let oppLynaResolved = false;
   let oppLyna5 = false;
   let coinFlipStarted = false;
+  let HandsDealtUnused = false;
   let handsDealt = false;
   let pendingWeStartFirst = false;
   let isApplyingRemotePacket = false;
   let matchSyncEnabled = false;
   let lastSyncedStateHash = null;
+  let requestCounter = 0;
+  const pendingProtectionRequests = new Map();
+  const pendingReactionRequests = new Map();
+  const pendingGraveInterceptorTimers = new Map();
+  const recentExplicitGraveTriggers = new Map();
 
   // Generador de código de sala limpio y legible (ej: SBX-7K9A)
   function generateRoomCode() {
@@ -271,10 +277,20 @@ const MultiplayerEngine = (() => {
 
     connection.on('close', () => {
       console.log("[Multiplayer] Conexión cerrada.");
+      const wasConnected = isConnected;
       isConnected = false;
-      alert("El rival se ha desconectado de la partida.");
-      if (typeof showScreen === 'function') {
-        showScreen('main-menu');
+      if (typeof playtestState !== 'undefined') {
+        playtestState.isOnlineMatch = false;
+      }
+      if (wasConnected) {
+        if (typeof showMatchEndModal === 'function') {
+          showMatchEndModal(false, "CONEXIÓN FINALIZADA", "Tu rival se ha desconectado o la partida ha terminado.");
+        } else {
+          alert("El rival se ha desconectado de la partida.");
+          if (typeof showScreen === 'function') {
+            showScreen('main-menu');
+          }
+        }
       }
     });
 
@@ -368,18 +384,48 @@ const MultiplayerEngine = (() => {
           executeRemoteAttack(packet.attackerSlot, packet.targetSlot);
           break;
 
+        case 'ACTION_ATTACK_RESOLVED':
+          // El defensor resolvió reacciones y daño sobre su personaje; ahora el atacante resuelve el suyo
+          executeRemoteAttackResolved(packet.attackerSlot, packet.targetSlot, packet.combatOccurred);
+          break;
+
         case 'ACTION_DRAW_CARD':
-          // El rival robó 1 carta
-          executeRemoteDrawCard();
+          // El rival robó 1 carta (o inició su turno)
+          executeRemoteDrawCard(packet);
           break;
 
         case 'ACTION_END_TURN':
           // El rival terminó su turno
-          executeRemotePassTurn();
+          executeRemotePassTurn(packet);
+          break;
+
+        case 'REMOTE_GRAVE_TRIGGER':
+          // Una carta propia fue enviada a nuestro cementerio por acción del rival
+          handleRemoteGraveTrigger(packet.cardId, packet.context || {});
+          break;
+
+        case 'REQUEST_PROTECTION_DECISION':
+          // El rival solicita saber si protegemos nuestras Skills (Ryu-chan SP180, Confrontación Forzada SP208, Golpe Súbito SP184)
+          handleProtectionRequest(packet);
+          break;
+
+        case 'RESPONSE_PROTECTION_DECISION':
+          // Respuesta del rival sobre si protegió sus Skills
+          handleProtectionResponse(packet);
+          break;
+
+        case 'REMOTE_REACTION_TRIGGER':
+          // El rival disparó una condición de reacción opcional nuestra (Marina SP343/SP410, Eishet SP357, Bao SP356, Dualidad SP428)
+          handleRemoteReactionTrigger(packet);
+          break;
+
+        case 'REMOTE_REACTION_DONE':
+          // El rival terminó de decidir/resolver su reacción
+          handleRemoteReactionDone(packet);
           break;
 
         case 'SYNC_STATE':
-          // Sincronización espejo del estado completo de zonas (banca, mano, mazo, cementerio, campo)
+          // Sincronización espejo del estado completo de zonas y banderas
           applyRemoteStateSync(packet.state);
           break;
 
@@ -397,10 +443,30 @@ const MultiplayerEngine = (() => {
           }
           break;
 
+        case 'ACTION_CARD_ACTIVATED':
+          // El rival activó un efecto: mostrar el showcase central de activación en nuestra pantalla
+          if (packet.cardId && typeof window !== 'undefined' && window.AnimationEngine && typeof window.AnimationEngine.showCardActivation === 'function') {
+            window.AnimationEngine.showCardActivation(packet.cardId, 'opponent');
+          }
+          break;
+
         case 'ACTION_SURRENDER':
-          alert("¡Tu rival se ha rendido! Has ganado el duelo.");
-          if (typeof showScreen === 'function') {
-            showScreen('main-menu');
+          if (typeof playtestState !== 'undefined') {
+            playtestState.matchEnded = true;
+          }
+          if (typeof adjustBo3Score === 'function') {
+            adjustBo3Score('victories', 1);
+          }
+          if (typeof addLog === 'function') {
+            addLog("🏳️ Tu rival se ha rendido del duelo. ¡Has ganado la partida!", 'var(--accent-cyan)');
+          }
+          if (typeof showMatchEndModal === 'function') {
+            showMatchEndModal(true, "¡VICTORIA!", "Tu rival se ha rendido del duelo.");
+          } else {
+            alert("¡Tu rival se ha rendido! Has ganado el duelo.");
+            if (typeof showScreen === 'function') {
+              showScreen('main-menu');
+            }
           }
           break;
 
@@ -420,6 +486,26 @@ const MultiplayerEngine = (() => {
     } else {
       console.warn("[Multiplayer] No se pudo enviar el paquete, canal cerrado:", packet);
     }
+  }
+
+  function waitForLocalUIIdle(onIdle) {
+    const check = () => {
+      const ctxMenu = typeof document !== 'undefined' ? document.getElementById('card-context-menu') : null;
+      const isCtxOpen = !!(ctxMenu && !ctxMenu.classList.contains('hidden') && ctxMenu.style.display !== 'none');
+      const isSelectionActive = !!(typeof playtestState !== 'undefined' && playtestState && playtestState.selectionMode && playtestState.selectionMode.active);
+      const dynamicModals = (typeof document !== 'undefined' && typeof document.querySelectorAll === 'function')
+        ? Array.from(document.querySelectorAll('.modal-overlay:not(.hidden)')).filter(el =>
+            !['duel-setup-modal', 'multiplayer-modal', 'rules-banlist-modal', 'pile-modal', 'starter-modal'].includes(el.id) &&
+            el.style.display !== 'none'
+          )
+        : [];
+      if (!isCtxOpen && !isSelectionActive && dynamicModals.length === 0) {
+        onIdle();
+      } else {
+        setTimeout(check, 100);
+      }
+    };
+    setTimeout(check, 50);
   }
 
   // 6. INICIAR PREPARACIÓN EN LÍNEA Y SELECCIÓN DE PERSONAJE INICIAL
@@ -459,6 +545,9 @@ const MultiplayerEngine = (() => {
         { character: null, skills: [], usedSkills: [], usedSkillIndexes: [], maxAttacks: 1, attacksDeclared: 0, isRotated: false, effectUsed: false, muroUsadoEsteTurno: false, isFaceDown: false },
         { character: null, skills: [], usedSkills: [], usedSkillIndexes: [], maxAttacks: 1, attacksDeclared: 0, isRotated: false, effectUsed: false, muroUsadoEsteTurno: false, isFaceDown: false }
       ];
+      if (typeof attachGraveyardInterceptors === 'function') {
+        attachGraveyardInterceptors();
+      }
     }
 
     if (typeof addLog === 'function') {
@@ -549,16 +638,23 @@ const MultiplayerEngine = (() => {
 
   // 9. LANZAMIENTO DE MONEDA 3D SINCRONIZADO
   function executeCoinFlip(coinResult, winner) {
+    const iWon = (isHost && winner === 'host') || (!isHost && winner === 'guest');
+    const mySide = isHost ? 'CARA' : 'SELLO';
+    const oppSide = isHost ? 'SELLO' : 'CARA';
+
     if (typeof addLog === 'function') {
-      addLog(`[Lanzamiento de Moneda] Lanzando moneda 3D compartida para determinar quién elige el orden de turno...`, 'var(--accent-cyan)');
+      addLog(`[Volado Inicial] Disputa de orden de turno: Tú (${mySide}) vs Rival (${oppSide}).`, 'var(--accent-cyan)');
     }
 
-    const onCoinFinished = (res) => {
-      const iWon = (isHost && winner === 'host') || (!isHost && winner === 'guest');
+    const initialText = `🪙 Volado Inicial: Tú (${mySide}) vs Rival (${oppSide}) 🪙`;
+    const winnerText = iWon
+      ? `👑 ¡Resultado: ${coinResult.toUpperCase()}! ¡Has ganado el volado! 👑`
+      : `🛡️ ¡Resultado: ${coinResult.toUpperCase()}! El rival ha ganado el volado. 🛡️`;
 
+    const onCoinFinished = (res) => {
       if (iWon) {
         if (typeof addLog === 'function') {
-          addLog(`👑 ¡Has obtenido ${res.toUpperCase()} y ganado el volado! Elige si deseas ir Primero o Segundo.`, 'var(--accent-cyan)');
+          addLog(`👑 ¡Obtuviste ${res.toUpperCase()} y ganaste el volado! Elige si deseas ir Primero o Segundo.`, 'var(--accent-cyan)');
         }
 
         if (typeof openTurnOrderChoiceModal === 'function') {
@@ -582,13 +678,13 @@ const MultiplayerEngine = (() => {
         }
       } else {
         if (typeof addLog === 'function') {
-          addLog(`👑 Tu rival ha obtenido ${res.toUpperCase()} y ganado el volado. Esperando que elija quién comienza...`, 'var(--accent-purple)');
+          addLog(`👑 Tu rival obtuvo ${res.toUpperCase()} y ganó el volado. Esperando que elija quién comienza...`, 'var(--accent-purple)');
         }
       }
     };
 
     if (typeof flipCoin === 'function') {
-      flipCoin(onCoinFinished, coinResult);
+      flipCoin(onCoinFinished, coinResult, { initialText, winnerText });
     } else {
       onCoinFinished(coinResult);
     }
@@ -703,12 +799,69 @@ const MultiplayerEngine = (() => {
     }
 
     if (typeof updatePlaytestView === 'function') updatePlaytestView();
+
+    // Si comienza el rival en Turno 1, verificar efectos propios de "al inicio del turno de tu adversario" (ej. Nobuko SP189, Eishet SP294)
+    if (!pendingWeStartFirst && typeof runOnlineOpponentTurnStartChain === 'function') {
+      isApplyingRemotePacket = false;
+      runOnlineOpponentTurnStartChain(null);
+    }
   }
 
-  // 12. SINCRONIZACIÓN ESPEJO AUTOMÁTICA DE ESTADO Y EFECTOS (BANCA, MANO, MAZO, CEMENTERIO, CAMPO)
+  // 12. SINCRONIZACIÓN ESPEJO AUTOMÁTICA DE ESTADO Y EFECTOS (BANCA, MANO, MAZO, CEMENTERIO, CAMPO, BANDERAS)
+  const SYMMETRIC_BOOL_PAIRS = [
+    ['playerGraveEffectsBlockedThisTurn', 'opponentGraveEffectsBlockedThisTurn'],
+    ['cannotDrawByEffectsThisTurn', 'opponentCannotDrawByEffectsThisTurn'],
+    ['usedPlanificar342ThisTurn', 'opponentUsedPlanificar342ThisTurn'],
+    ['usedNostalgia351ThisTurn', 'opponentUsedNostalgia351ThisTurn'],
+    ['usedSuenoDeSirvienta353ThisTurn', 'opponentUsedSuenoDeSirvienta353ThisTurn'],
+    ['usedManipulacion354ThisTurn', 'opponentUsedManipulacion354ThisTurn'],
+    ['usedInerme355ThisGame', 'opponentUsedInerme355ThisGame'],
+    ['usedVoidOh367ThisTurn', 'opponentUsedVoidOh367ThisTurn'],
+    ['usedFlorete371ThisTurn', 'opponentUsedFlorete371ThisTurn'],
+    ['usedCrepusculo380ThisGame', 'opponentUsedCrepusculo380ThisGame'],
+    ['usedAscension415ThisGame', 'opponentUsedAscension415ThisGame'],
+    ['usedAumentarVigor417ThisTurn', 'opponentUsedAumentarVigor417ThisTurn'],
+    ['usedDominioDelJuego418ThisTurn', 'opponentUsedDominioDelJuego418ThisTurn'],
+    ['usedContrato419ThisTurn', 'opponentUsedContrato419ThisTurn'],
+    ['usedVoluntadDelAgua421ThisTurn', 'opponentUsedVoluntadDelAgua421ThisTurn'],
+    ['voluntadDelAguaUsedThisTurn', 'opponentVoluntadDelAguaUsedThisTurn'],
+    ['usedCuestionDeTactica422ThisTurn', 'opponentUsedCuestionDeTactica422ThisTurn'],
+    ['usedSonrisaQueAcecha426ThisTurn', 'opponentUsedSonrisaQueAcecha426ThisTurn'],
+    ['usedSiBuenaIdea427ThisTurn', 'opponentUsedSiBuenaIdea427ThisTurn'],
+    ['usedCiclonDePalma429ThisTurn', 'opponentUsedCiclonDePalma429ThisTurn'],
+    ['ocasoDelPasadoUsedThisTurn', 'opponentOcasoDelPasadoUsedThisTurn'],
+    ['desenfundarUsedThisTurn', 'opponentDesenfundarUsedThisTurn'],
+    ['descuidoUsedThisTurn', 'opponentDescuidoUsedThisTurn']
+  ];
+
+  const SYMMETRIC_VALUE_PAIRS = [
+    ['pendingRoy339SearchPlayer', 'pendingRoy339SearchOpponent'],
+    ['usedBajoLaLuzLunarGraveCount', 'opponentUsedBajoLaLuzLunarGraveCount'],
+    ['recursosSP404SentTurn', 'opponentRecursosSP404SentTurn'],
+    ['bigWinSkillHeads', 'opponentBigWinSkillHeads'],
+    ['colapsarSistemaCount', 'opponentColapsarSistemaCount'],
+    ['ascensoArcanoCountThisTurn', 'opponentAscensoArcanoCountThisTurn'],
+    ['descansoCountThisTurn', 'opponentDescansoCountThisTurn'],
+    ['apagonCountThisTurn', 'opponentApagonCountThisTurn'],
+    ['desertarCountThisTurn', 'opponentDesertarCountThisTurn']
+  ];
+
+  const SYMMETRIC_ARRAY_PAIRS = [
+    ['unplayableCharactersToFieldThisTurn', 'opponentUnplayableCharactersToFieldThisTurn'],
+    ['usedGlobalEffects', 'opponentUsedGlobalEffects'],
+    ['usedPerGameEffects', 'opponentUsedPerGameEffects'],
+    ['activatedSkillNamesThisTurn', 'opponentActivatedSkillNamesThisTurn']
+  ];
+
+  function invertOwnerSide(side) {
+    if (side === 'player') return 'opponent';
+    if (side === 'opponent') return 'player';
+    return side;
+  }
+
   function getBoardStateSnapshot() {
-    if (typeof playtestState === 'undefined') return null;
-    return {
+    if (typeof playtestState === 'undefined' || !playtestState) return null;
+    const snap = {
       slots: JSON.parse(JSON.stringify(playtestState.slots || [])),
       opponentSlots: JSON.parse(JSON.stringify(playtestState.opponentSlots || [])),
       bench: JSON.parse(JSON.stringify(playtestState.bench || [])),
@@ -719,13 +872,30 @@ const MultiplayerEngine = (() => {
       opponentHand: JSON.parse(JSON.stringify(playtestState.opponentHand || [])),
       deck: JSON.parse(JSON.stringify(playtestState.deck || [])),
       opponentDeck: JSON.parse(JSON.stringify(playtestState.opponentDeck || [])),
-      playerGraveEffectsBlockedThisTurn: !!playtestState.playerGraveEffectsBlockedThisTurn,
-      opponentGraveEffectsBlockedThisTurn: !!playtestState.opponentGraveEffectsBlockedThisTurn,
-      cannotDrawByEffectsThisTurn: !!playtestState.cannotDrawByEffectsThisTurn,
-      opponentCannotDrawByEffectsThisTurn: !!playtestState.opponentCannotDrawByEffectsThisTurn,
-      unplayableCharactersToFieldThisTurn: JSON.parse(JSON.stringify(playtestState.unplayableCharactersToFieldThisTurn || [])),
-      opponentUnplayableCharactersToFieldThisTurn: JSON.parse(JSON.stringify(playtestState.opponentUnplayableCharactersToFieldThisTurn || []))
+      field: playtestState.field || null,
+      opponentField: playtestState.opponentField || null,
+      cannotEquipSkillNameThisTurn: playtestState.cannotEquipSkillNameThisTurn || null,
+      skillsRemovedByEffectThisTurn: playtestState.skillsRemovedByEffectThisTurn || 0,
+      recalcularSP324ActiveThisTurn: !!playtestState.recalcularSP324ActiveThisTurn,
+      activeContratosSP419: JSON.parse(JSON.stringify(playtestState.activeContratosSP419 || [])),
+      cuentaAtrasList: JSON.parse(JSON.stringify(playtestState.cuentaAtrasList || [])),
+      pendingPlanificar342List: JSON.parse(JSON.stringify(playtestState.pendingPlanificar342List || []))
     };
+
+    for (const [pKey, oKey] of SYMMETRIC_BOOL_PAIRS) {
+      snap[pKey] = !!playtestState[pKey];
+      snap[oKey] = !!playtestState[oKey];
+    }
+    for (const [pKey, oKey] of SYMMETRIC_VALUE_PAIRS) {
+      snap[pKey] = playtestState[pKey] ?? null;
+      snap[oKey] = playtestState[oKey] ?? null;
+    }
+    for (const [pKey, oKey] of SYMMETRIC_ARRAY_PAIRS) {
+      snap[pKey] = JSON.parse(JSON.stringify(playtestState[pKey] || []));
+      snap[oKey] = JSON.parse(JSON.stringify(playtestState[oKey] || []));
+    }
+
+    return snap;
   }
 
   function syncStateIfChanged() {
@@ -748,55 +918,75 @@ const MultiplayerEngine = (() => {
   function applyRemoteStateSync(remoteState) {
     if (typeof playtestState === 'undefined' || !remoteState) return;
 
-    // Espejo simétrico: las zonas "player" del rival son nuestras zonas "opponent" y viceversa
+    // Espejo simétrico: las zonas propias del rival actualizan nuestras zonas "opponent"
+    // (Bajo ninguna circunstancia las zonas "opponent" obsoletas del rival deben sobreescribir nuestras zonas locales "player")
     if (Array.isArray(remoteState.slots)) {
       playtestState.opponentSlots = JSON.parse(JSON.stringify(remoteState.slots));
-    }
-    if (Array.isArray(remoteState.opponentSlots)) {
-      playtestState.slots = JSON.parse(JSON.stringify(remoteState.opponentSlots));
     }
     if (Array.isArray(remoteState.bench)) {
       playtestState.opponentBench = JSON.parse(JSON.stringify(remoteState.bench));
     }
-    if (Array.isArray(remoteState.opponentBench)) {
-      playtestState.bench = JSON.parse(JSON.stringify(remoteState.opponentBench));
-    }
     if (Array.isArray(remoteState.grave)) {
       playtestState.opponentGrave = JSON.parse(JSON.stringify(remoteState.grave));
     }
-    if (Array.isArray(remoteState.opponentGrave)) {
-      playtestState.grave = JSON.parse(JSON.stringify(remoteState.opponentGrave));
+    if (typeof attachGraveyardInterceptors === 'function') {
+      attachGraveyardInterceptors();
     }
     if (Array.isArray(remoteState.hand)) {
       playtestState.opponentHand = JSON.parse(JSON.stringify(remoteState.hand));
     }
-    if (Array.isArray(remoteState.opponentHand)) {
-      playtestState.hand = JSON.parse(JSON.stringify(remoteState.opponentHand));
-    }
     if (Array.isArray(remoteState.deck)) {
       playtestState.opponentDeck = JSON.parse(JSON.stringify(remoteState.deck));
     }
-    if (Array.isArray(remoteState.opponentDeck)) {
-      playtestState.deck = JSON.parse(JSON.stringify(remoteState.opponentDeck));
+    if ('field' in remoteState) {
+      playtestState.opponentField = remoteState.field;
     }
 
-    if (typeof remoteState.playerGraveEffectsBlockedThisTurn === 'boolean') {
-      playtestState.opponentGraveEffectsBlockedThisTurn = remoteState.playerGraveEffectsBlockedThisTurn;
+    for (const [pKey, oKey] of SYMMETRIC_BOOL_PAIRS) {
+      if (typeof remoteState[pKey] === 'boolean') {
+        playtestState[oKey] = remoteState[pKey];
+      }
     }
-    if (typeof remoteState.opponentGraveEffectsBlockedThisTurn === 'boolean') {
-      playtestState.playerGraveEffectsBlockedThisTurn = remoteState.opponentGraveEffectsBlockedThisTurn;
+
+    for (const [pKey, oKey] of SYMMETRIC_VALUE_PAIRS) {
+      if (pKey in remoteState) {
+        playtestState[oKey] = remoteState[pKey];
+      }
     }
-    if (typeof remoteState.cannotDrawByEffectsThisTurn === 'boolean') {
-      playtestState.opponentCannotDrawByEffectsThisTurn = remoteState.cannotDrawByEffectsThisTurn;
+
+    for (const [pKey, oKey] of SYMMETRIC_ARRAY_PAIRS) {
+      if (Array.isArray(remoteState[pKey])) {
+        playtestState[oKey] = JSON.parse(JSON.stringify(remoteState[pKey]));
+      }
     }
-    if (typeof remoteState.opponentCannotDrawByEffectsThisTurn === 'boolean') {
-      playtestState.cannotDrawByEffectsThisTurn = remoteState.opponentCannotDrawByEffectsThisTurn;
+
+    if ('cannotEquipSkillNameThisTurn' in remoteState) {
+      playtestState.cannotEquipSkillNameThisTurn = remoteState.cannotEquipSkillNameThisTurn;
     }
-    if (Array.isArray(remoteState.unplayableCharactersToFieldThisTurn)) {
-      playtestState.opponentUnplayableCharactersToFieldThisTurn = [...remoteState.unplayableCharactersToFieldThisTurn];
+    if (typeof remoteState.skillsRemovedByEffectThisTurn === 'number') {
+      playtestState.skillsRemovedByEffectThisTurn = remoteState.skillsRemovedByEffectThisTurn;
     }
-    if (Array.isArray(remoteState.opponentUnplayableCharactersToFieldThisTurn)) {
-      playtestState.unplayableCharactersToFieldThisTurn = [...remoteState.opponentUnplayableCharactersToFieldThisTurn];
+    if (typeof remoteState.recalcularSP324ActiveThisTurn === 'boolean') {
+      playtestState.recalcularSP324ActiveThisTurn = remoteState.recalcularSP324ActiveThisTurn;
+    }
+    if (Array.isArray(remoteState.activeContratosSP419)) {
+      playtestState.activeContratosSP419 = remoteState.activeContratosSP419.map(c => ({
+        ...c,
+        activator: invertOwnerSide(c.activator),
+        adversary: invertOwnerSide(c.adversary)
+      }));
+    }
+    if (Array.isArray(remoteState.cuentaAtrasList)) {
+      playtestState.cuentaAtrasList = remoteState.cuentaAtrasList.map(cd => ({
+        ...cd,
+        activator: invertOwnerSide(cd.activator)
+      }));
+    }
+    if (Array.isArray(remoteState.pendingPlanificar342List)) {
+      playtestState.pendingPlanificar342List = remoteState.pendingPlanificar342List.map(item => ({
+        ...item,
+        owner: invertOwnerSide(item.owner)
+      }));
     }
 
     const currentSnapshot = getBoardStateSnapshot();
@@ -845,7 +1035,223 @@ const MultiplayerEngine = (() => {
     });
   }
 
-  // 13. EJECUCIÓN REMOTA DE JUGADAS (CUANDO EL RIVAL HACE UN MOVIMIENTO)
+  // 13. COORDINACIÓN P2P DE TRIGGERS DE CEMENTERIO, PROTECCIÓN DE SKILLS Y REACCIONES
+  function sendGraveTriggerToPeer(cardId, context = {}) {
+    if (!isConnected || !cardId) return;
+    const now = Date.now();
+
+    if (context && context.fromInterceptor) {
+      // Si ya se envió un trigger explícito con contexto rico para esta carta hace menos de 150ms, ignorar el interceptor
+      const lastExplicit = recentExplicitGraveTriggers.get(cardId);
+      if (lastExplicit && (now - lastExplicit) < 150) {
+        return;
+      }
+      // Esperar brevemente por si enseguida se invoca dispatchGraveTriggers(cardId, 'opponent', richContext)
+      const timerId = setTimeout(() => {
+        pendingGraveInterceptorTimers.delete(cardId);
+        const recent = recentExplicitGraveTriggers.get(cardId);
+        if (recent && (Date.now() - recent) < 150) return;
+        syncStateIfChanged();
+        sendPacket({
+          type: 'REMOTE_GRAVE_TRIGGER',
+          cardId,
+          context: { fromInterceptor: true }
+        });
+      }, 25);
+      pendingGraveInterceptorTimers.set(cardId, timerId);
+      return;
+    }
+
+    // Es un trigger explícito (ej. desde dispatchGraveTriggers o onEquippedSkillSentToGraveByEffect)
+    recentExplicitGraveTriggers.set(cardId, now);
+    if (pendingGraveInterceptorTimers.has(cardId)) {
+      clearTimeout(pendingGraveInterceptorTimers.get(cardId));
+      pendingGraveInterceptorTimers.delete(cardId);
+    }
+
+    const cleanContext = {
+      fromZone: context.fromZone,
+      isEquipped: context.isEquipped,
+      slotIndex: context.slotIndex,
+      byEffect: context.byEffect,
+      sourceOwner: context.sourceOwner
+    };
+
+    syncStateIfChanged();
+    sendPacket({
+      type: 'REMOTE_GRAVE_TRIGGER',
+      cardId,
+      context: cleanContext
+    });
+  }
+
+  function handleRemoteGraveTrigger(cardId, rawContext = {}) {
+    if (typeof playtestState === 'undefined' || !cardId) return;
+
+    // Permitir que las decisiones/efectos del jugador local se sincronicen de vuelta al rival
+    isApplyingRemotePacket = false;
+
+    const peerContext = {
+      ...rawContext,
+      sourceOwner: rawContext.sourceOwner ? invertOwnerSide(rawContext.sourceOwner) : 'opponent'
+    };
+
+    if (cardId === 'BBX-SP200') {
+      playtestState.ascensoArcanoCountThisTurn = (playtestState.ascensoArcanoCountThisTurn || 0) + 1;
+    }
+    if (cardId === 'BBX-SP404' && playtestState.turnOwner === 'opponent') {
+      playtestState.recursosSP404SentTurn = playtestState.turnCount || 1;
+    }
+
+    if (typeof dispatchGraveTriggers === 'function') {
+      dispatchGraveTriggers(cardId, 'player', peerContext);
+    }
+
+    // Triggers pasivos que observan cualquier carta que cae en nuestro cementerio
+    setTimeout(() => {
+      if (cardId !== 'BBX-SP134' && typeof checkAndTriggerDesdeLaSombraPlayer === 'function') {
+        checkAndTriggerDesdeLaSombraPlayer(cardId);
+      }
+      if (cardId !== 'BBX-SP255' && typeof checkAndTriggerKatshi255 === 'function') {
+        checkAndTriggerKatshi255(cardId);
+      }
+      if (cardId !== 'BBX-SP260' && typeof checkAndTriggerKatshi260 === 'function') {
+        checkAndTriggerKatshi260(cardId);
+      }
+      if (cardId !== 'BBX-SP256' && typeof checkAndTriggerReflejoSiniestro === 'function') {
+        checkAndTriggerReflejoSiniestro(cardId);
+      }
+      if (cardId !== 'BBX-SP221' && typeof checkAndTriggerRemembranza === 'function') {
+        checkAndTriggerRemembranza(cardId, 'player');
+      }
+      if (cardId !== 'BBX-SP268' && typeof checkAndTriggerEnergiaArcana === 'function') {
+        checkAndTriggerEnergiaArcana(cardId);
+      }
+      if (peerContext.isEquipped && peerContext.sourceOwner === 'opponent' && cardId !== 'BBX-SP300' && typeof checkAndTriggerHoraDelTe === 'function') {
+        checkAndTriggerHoraDelTe(cardId, 'player', peerContext);
+      }
+      waitForLocalUIIdle(() => {
+        if (typeof updatePlaytestView === 'function') updatePlaytestView();
+        syncStateIfChanged();
+      });
+    }, 60);
+  }
+
+  function requestProtectionDecision(protectType, count, totalCards, onCancel, onProceed) {
+    if (!isConnected) {
+      if (typeof onProceed === 'function') onProceed();
+      return;
+    }
+    const requestId = `prot_${++requestCounter}_${Date.now()}`;
+    pendingProtectionRequests.set(requestId, { onCancel, onProceed });
+    syncStateIfChanged();
+    sendPacket({
+      type: 'REQUEST_PROTECTION_DECISION',
+      requestId,
+      protectType,
+      count,
+      totalCards
+    });
+  }
+
+  function handleProtectionRequest(packet) {
+    if (typeof playtestState === 'undefined') return;
+    isApplyingRemotePacket = false;
+
+    const { requestId, protectType, count, totalCards } = packet;
+    const sendDecision = (canceled) => {
+      if (typeof updatePlaytestView === 'function') updatePlaytestView();
+      syncStateIfChanged();
+      sendPacket({
+        type: 'RESPONSE_PROTECTION_DECISION',
+        requestId,
+        canceled: !!canceled
+      });
+    };
+
+    if (protectType === 'shuffle_to_deck' && typeof checkAndProtectShuffleSkillsToDeck === 'function') {
+      checkAndProtectShuffleSkillsToDeck('player', () => sendDecision(true), () => sendDecision(false), count, totalCards);
+    } else if (protectType === 'send_to_grave' && typeof checkAndProtectSendSkillsToGrave === 'function') {
+      checkAndProtectSendSkillsToGrave('player', () => sendDecision(true), () => sendDecision(false), count, totalCards);
+    } else {
+      sendDecision(false);
+    }
+  }
+
+  function handleProtectionResponse(packet) {
+    const entry = pendingProtectionRequests.get(packet.requestId);
+    if (!entry) return;
+    pendingProtectionRequests.delete(packet.requestId);
+    isApplyingRemotePacket = false;
+
+    if (packet.canceled) {
+      if (typeof entry.onCancel === 'function') entry.onCancel();
+    } else {
+      if (typeof entry.onProceed === 'function') entry.onProceed();
+    }
+    if (typeof updatePlaytestView === 'function') updatePlaytestView();
+    syncStateIfChanged();
+  }
+
+  function sendReactionTriggerToPeer(triggerType, payload = {}, onDone = null) {
+    if (!isConnected) {
+      if (typeof onDone === 'function') onDone();
+      return;
+    }
+    const requestId = `react_${++requestCounter}_${Date.now()}`;
+    pendingReactionRequests.set(requestId, { onDone });
+    syncStateIfChanged();
+    sendPacket({
+      type: 'REMOTE_REACTION_TRIGGER',
+      requestId,
+      triggerType,
+      payload
+    });
+  }
+
+  function handleRemoteReactionTrigger(packet) {
+    if (typeof playtestState === 'undefined') return;
+    isApplyingRemotePacket = false;
+
+    const { requestId, triggerType, payload = {} } = packet;
+    const finishReaction = () => {
+      if (typeof updatePlaytestView === 'function') updatePlaytestView();
+      syncStateIfChanged();
+      sendPacket({
+        type: 'REMOTE_REACTION_DONE',
+        requestId
+      });
+    };
+
+    if (triggerType === 'MARINA_SP343' && typeof checkAndTriggerMarinaSP343 === 'function') {
+      checkAndTriggerMarinaSP343('player', finishReaction);
+    } else if (triggerType === 'MARINA_SP410' && typeof checkAndTriggerMarinaSP410 === 'function') {
+      checkAndTriggerMarinaSP410(payload.triggerCardId, 'opponent', 'player', {}, finishReaction);
+    } else if (triggerType === 'EISHET_SP357' && typeof checkAndTriggerEishetSP357 === 'function') {
+      checkAndTriggerEishetSP357('player', finishReaction);
+    } else if (triggerType === 'BAO_SP356' && typeof checkAndTriggerBaoSP356 === 'function') {
+      checkAndTriggerBaoSP356(finishReaction, true);
+    } else if (triggerType === 'DUALIDAD_SP428' && typeof checkAndTriggerDualidadSP428 === 'function') {
+      checkAndTriggerDualidadSP428('opponent', payload.slotIndex, payload.playedCharId, {}, finishReaction);
+    } else {
+      finishReaction();
+    }
+  }
+
+  function handleRemoteReactionDone(packet) {
+    const entry = pendingReactionRequests.get(packet.requestId);
+    if (!entry) return;
+    pendingReactionRequests.delete(packet.requestId);
+    isApplyingRemotePacket = false;
+
+    if (typeof entry.onDone === 'function') {
+      entry.onDone();
+    }
+    if (typeof updatePlaytestView === 'function') updatePlaytestView();
+    syncStateIfChanged();
+  }
+
+  // 14. EJECUCIÓN REMOTA DE JUGADAS (CUANDO EL RIVAL HACE UN MOVIMIENTO)
   function executeRemotePlayCharacter(slotIndex, cardId, isEvolucion) {
     if (typeof playtestState === 'undefined') return;
     const card = (typeof cardsDatabase !== 'undefined') ? cardsDatabase[cardId] : null;
@@ -933,108 +1339,201 @@ const MultiplayerEngine = (() => {
     const playerSlot = playtestState.slots[targetSlot];
     if (!oppSlot || !oppSlot.character || !playerSlot || !playerSlot.character) return;
 
+    isApplyingRemotePacket = false;
+
     const attackerCard = cardsDatabase[oppSlot.character];
     const defenderCard = cardsDatabase[playerSlot.character];
 
-    oppSlot.attacksDeclared = (oppSlot.attacksDeclared || 0) + 1;
-    if (oppSlot.attacksDeclared >= (oppSlot.maxAttacks || 1)) {
-      oppSlot.isRotated = true;
-    }
-
     if (typeof addLog === 'function') {
-      addLog(`⚔️ 🌐 [Rival] <strong>${attackerCard.nombre}</strong> declara un ataque contra tu <strong>${defenderCard.nombre}</strong>.`, 'var(--accent-danger)');
+      addLog(`⚔️ 🌐 [Rival] <strong>${attackerCard ? attackerCard.nombre : oppSlot.character}</strong> declara un ataque contra tu <strong>${defenderCard ? defenderCard.nombre : playerSlot.character}</strong>.`, 'var(--accent-danger)');
     }
 
-    const executeDamage = () => {
-      if (typeof addLog === 'function') {
-        addLog(`[Combate] Resolución de combate: <strong>${attackerCard.nombre}</strong> y <strong>${defenderCard.nombre}</strong> se infligen daño mutuo ("se pegan").`, 'var(--accent-warning)');
+    if (playerSlot && playerSlot.character === 'BBX-SP319' && typeof checkAndTriggerChiakoSP319AttackTarget === 'function') {
+      checkAndTriggerChiakoSP319AttackTarget('player', targetSlot, 'opponent');
+    }
+
+    const resolveDefenderCombat = () => {
+      const currOppSlot = playtestState.opponentSlots[attackerSlot];
+      const currPlayerSlot = playtestState.slots[targetSlot];
+      if (!currOppSlot || !currOppSlot.character || !currPlayerSlot || !currPlayerSlot.character) {
+        if (typeof updatePlaytestView === 'function') updatePlaytestView();
+        syncStateIfChanged();
+        sendPacket({
+          type: 'ACTION_ATTACK_RESOLVED',
+          attackerSlot,
+          targetSlot,
+          combatOccurred: false
+        });
+        return;
       }
-      if (typeof updatePlaytestView === 'function') updatePlaytestView();
+
+      const currAttackerName = cardsDatabase[currOppSlot.character]?.nombre || currOppSlot.character;
+      const currDefenderName = cardsDatabase[currPlayerSlot.character]?.nombre || currPlayerSlot.character;
+
+      const executeDefenderDamage = () => {
+        if (typeof addLog === 'function') {
+          addLog(`[Combate] Resolución de combate: <strong>${currAttackerName}</strong> y <strong>${currDefenderName}</strong> se infligen daño mutuo ("se pegan").`, 'var(--accent-warning)');
+        }
+        if (typeof resolveStandardDestruction === 'function') {
+          resolveStandardDestruction(targetSlot);
+        }
+        waitForLocalUIIdle(() => {
+          if (typeof updatePlaytestView === 'function') updatePlaytestView();
+          syncStateIfChanged();
+          sendPacket({
+            type: 'ACTION_ATTACK_RESOLVED',
+            attackerSlot,
+            targetSlot,
+            combatOccurred: true
+          });
+        });
+      };
+
+      if (typeof window !== 'undefined' && window.AnimationEngine && typeof window.AnimationEngine.animateAttackClash === 'function') {
+        window.AnimationEngine.animateAttackClash(attackerSlot, targetSlot, 'opponent', () => {
+          executeDefenderDamage();
+        });
+      } else {
+        executeDefenderDamage();
+      }
     };
 
-    if (typeof window !== 'undefined' && window.AnimationEngine && typeof window.AnimationEngine.animateAttackClash === 'function') {
-      window.AnimationEngine.animateAttackClash(attackerSlot, targetSlot, 'opponent', () => {
-        executeDamage();
-      });
+    const checkLocalResistir = () => {
+      const isResistirBlocked = typeof isSkillHandEffectBlocked === 'function' && isSkillHandEffectBlocked('player');
+      const hasResistirInHand = (playtestState.hand || []).includes('BBX-SP060') && !isResistirBlocked;
+      if (hasResistirInHand && playerSlot && playerSlot.character && typeof showContextMenu === 'function') {
+        const defName = cardsDatabase[playerSlot.character]?.nombre || playerSlot.character;
+        const itemsResistir = [
+          {
+            text: "💥 No activar \"Resistir\"",
+            action: () => {
+              resolveDefenderCombat();
+            }
+          },
+          {
+            text: `✊ Activar "Resistir" desde tu mano (Equipar a ${defName} y Salvar)`,
+            action: () => {
+              const idxInHand = playtestState.hand.indexOf('BBX-SP060');
+              if (idxInHand !== -1) {
+                playtestState.hand.splice(idxInHand, 1);
+                playerSlot.skills.push('BBX-SP060');
+                if (typeof addLog === 'function') {
+                  addLog(`[Efecto Mano] Activaste <strong>Resistir (BBX-SP060)</strong> desde tu mano y se la equipaste a <strong>${defName}</strong>.`, 'var(--accent-cyan)');
+                }
+                if (typeof updatePlaytestView === 'function') updatePlaytestView();
+                syncStateIfChanged();
+              }
+              resolveDefenderCombat();
+            }
+          }
+        ];
+        const dummyEvent = {
+          clientX: typeof window !== 'undefined' ? window.innerWidth / 2 - 120 : 0,
+          clientY: typeof window !== 'undefined' ? window.innerHeight / 2 - 80 : 0
+        };
+        showContextMenu(dummyEvent, itemsResistir, () => {
+          resolveDefenderCombat();
+        });
+      } else {
+        resolveDefenderCombat();
+      }
+    };
+
+    const runKatshiStep = () => {
+      if (typeof checkAndTriggerKatshiHandSP344 === 'function') {
+        checkAndTriggerKatshiHandSP344('player', playerSlot, checkLocalResistir);
+      } else {
+        checkLocalResistir();
+      }
+    };
+
+    const runAlterarPactoStep = () => {
+      if (typeof checkAndTriggerAlterarPacto === 'function') {
+        checkAndTriggerAlterarPacto('player', playerSlot, runKatshiStep);
+      } else {
+        runKatshiStep();
+      }
+    };
+
+    if (typeof checkAndTriggerHelicaBenchSP335 === 'function') {
+      checkAndTriggerHelicaBenchSP335('player', playerSlot, runAlterarPactoStep);
     } else {
-      executeDamage();
+      runAlterarPactoStep();
     }
   }
 
-  function executeRemoteDrawCard() {
+  function executeRemoteAttackResolved(attackerSlot, targetSlot, combatOccurred) {
     if (typeof playtestState === 'undefined') return;
-    if (playtestState.opponentDeck && playtestState.opponentDeck.length > 0) {
-      const cardId = playtestState.opponentDeck.shift();
-      if (!playtestState.opponentHand) playtestState.opponentHand = [];
-      playtestState.opponentHand.push(cardId);
+    isApplyingRemotePacket = false;
+
+    if (!combatOccurred) {
+      if (typeof updatePlaytestView === 'function') updatePlaytestView();
+      syncStateIfChanged();
+      return;
+    }
+
+    const resolveAttackerSide = () => {
+      if (typeof resolveStandardDestruction === 'function') {
+        resolveStandardDestruction(attackerSlot);
+      }
+      waitForLocalUIIdle(() => {
+        if (typeof updatePlaytestView === 'function') updatePlaytestView();
+        syncStateIfChanged();
+      });
+    };
+
+    if (typeof window !== 'undefined' && window.AnimationEngine && typeof window.AnimationEngine.animateAttackClash === 'function') {
+      window.AnimationEngine.animateAttackClash(attackerSlot, targetSlot, 'player', () => {
+        resolveAttackerSide();
+      });
+    } else {
+      resolveAttackerSide();
+    }
+  }
+
+  function executeRemoteDrawCard(packet = {}) {
+    if (typeof playtestState === 'undefined') return;
+    let drawnCardId = packet.cardId || null;
+
+    if (typeof packet.turnCount === 'number') {
+      playtestState.turnCount = packet.turnCount;
+    }
+
+    if (!packet.noDraw) {
+      if (!packet.alreadySynced && playtestState.opponentDeck && playtestState.opponentDeck.length > 0) {
+        const cardId = playtestState.opponentDeck.shift();
+        if (!drawnCardId) drawnCardId = cardId;
+        if (!playtestState.opponentHand) playtestState.opponentHand = [];
+        playtestState.opponentHand.push(cardId);
+      }
 
       if (typeof animateCardDraw === 'function') {
-        animateCardDraw('opponent', cardId);
+        animateCardDraw('opponent', drawnCardId);
       }
       if (typeof addLog === 'function') {
         addLog(`🌐 [Rival] Robó 1 carta de su mazo.`);
       }
       if (typeof updatePlaytestView === 'function') updatePlaytestView();
     }
+
+    if (packet.isTurnStartDraw && typeof runOnlineOpponentTurnStartChain === 'function') {
+      isApplyingRemotePacket = false;
+      runOnlineOpponentTurnStartChain(drawnCardId, () => {
+        syncStateIfChanged();
+      });
+    }
   }
 
   function executeRemotePassTurn() {
     if (typeof playtestState === 'undefined') return;
 
-    // Restaurar estados "una vez por turno"
-    playtestState.slots.forEach(slot => {
-      slot.effectUsed = false;
-      slot.usedSkills = [];
-      slot.usedSkillIndexes = [];
-      slot.maxAttacks = 1;
-      slot.attacksDeclared = 0;
-      slot.isRotated = false;
-      slot.muroUsadoEsteTurno = false;
-      slot.cannotBeDestroyedByBattleUntilTurnEnd = false;
-    });
-
-    playtestState.bench.forEach(bCard => {
-      bCard.effectUsed = false;
-    });
-
-    playtestState.usedGlobalEffects = [];
-    playtestState.activatedSkillNamesThisTurn = [];
-    playtestState.cannotDrawByEffectsThisTurn = false;
-    playtestState.opponentCannotDrawByEffectsThisTurn = false;
-    playtestState.playerGraveEffectsBlockedThisTurn = false;
-    playtestState.opponentGraveEffectsBlockedThisTurn = false;
-    playtestState.unplayableCharactersToFieldThisTurn = [];
-    playtestState.opponentUnplayableCharactersToFieldThisTurn = [];
-
-    // Cambiar turno al Jugador local
-    playtestState.turnOwner = 'player';
-    playtestState.turnCount = (playtestState.turnCount || 1) + 1;
-
-    if (typeof updateTurnBadgeUI === 'function') updateTurnBadgeUI();
-    const btn = document.getElementById('btn-toggle-turn');
-    if (btn) {
-      btn.textContent = "Turno: Jugador (Tú)";
-      btn.style.borderColor = "var(--accent-cyan)";
-      btn.style.color = "var(--accent-cyan)";
-    }
-
-    if (typeof addLog === 'function') {
-      addLog(`⚔️ [Turno ${playtestState.turnCount}] ¡Es tu turno! Robas 1 carta.`, 'var(--accent-cyan)');
-    }
-
-    // Permitir que el robo de inicio de turno y la des-rotación de tus cartas se sincronicen de vuelta al rival
+    // Permitir que todos los efectos de "al final del turno del adversario" y el inicio de nuestro turno se sincronicen de vuelta al rival
     isApplyingRemotePacket = false;
 
-    // Robar carta del turno
-    if (typeof drawCard === 'function') {
-      drawCard();
+    if (typeof toggleTurnOwner === 'function') {
+      toggleTurnOwner(true);
+      return;
     }
-
-    if (typeof window !== 'undefined' && window.AnimationEngine && typeof window.AnimationEngine.showPhaseBanner === 'function') {
-      window.AnimationEngine.showPhaseBanner(`TURNO ${playtestState.turnCount}: TU TURNO`);
-    }
-
-    if (typeof updatePlaytestView === 'function') updatePlaytestView();
   }
 
   // 9. COPIAR CÓDIGO
@@ -1082,6 +1581,15 @@ const MultiplayerEngine = (() => {
     isApplyingRemotePacket = false;
     matchSyncEnabled = false;
     lastSyncedStateHash = null;
+    pendingProtectionRequests.clear();
+    pendingReactionRequests.clear();
+    pendingGraveInterceptorTimers.forEach(t => clearTimeout(t));
+    pendingGraveInterceptorTimers.clear();
+    recentExplicitGraveTriggers.clear();
+
+    if (typeof playtestState !== 'undefined') {
+      playtestState.isOnlineMatch = false;
+    }
 
     const initialView = document.getElementById('mp-create-initial');
     const waitingView = document.getElementById('mp-create-waiting');
@@ -1098,10 +1606,15 @@ const MultiplayerEngine = (() => {
     sendPacket,
     copyRoomCode,
     cancelRoom,
+    disconnect: cancelRoom,
     syncStateIfChanged,
     syncLogIfLocal,
     applyRemoteStateSync,
     getBoardStateSnapshot,
+    sendGraveTriggerToPeer,
+    requestProtectionDecision,
+    sendReactionTriggerToPeer,
+    isApplyingRemote: () => isApplyingRemotePacket,
     isConnected: () => isConnected,
     isHost: () => isHost,
     getRoomCode: () => roomCode

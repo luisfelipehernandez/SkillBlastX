@@ -175,6 +175,13 @@
   function dispatchGraveTriggers(cardId, owner = 'player', context = {}) {
     if (!cardId) return false;
 
+    if (owner === 'opponent' && typeof playtestState !== 'undefined' && playtestState && playtestState.isOnlineMatch) {
+      if (typeof MultiplayerEngine !== 'undefined' && MultiplayerEngine.isConnected() && typeof MultiplayerEngine.sendGraveTriggerToPeer === 'function' && (!MultiplayerEngine.isApplyingRemote || !MultiplayerEngine.isApplyingRemote())) {
+        MultiplayerEngine.sendGraveTriggerToPeer(cardId, context);
+      }
+      return false;
+    }
+
     // Validación mediante RulesEngine
     const reg = (typeof root !== 'undefined' && root.RulesEngine) ? root.RulesEngine : (typeof window !== 'undefined' ? window.RulesEngine : null);
     if (reg && typeof reg.canActivateFromZone === 'function') {

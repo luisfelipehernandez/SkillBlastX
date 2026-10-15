@@ -401,22 +401,6 @@
         if (s) s.attackedThisTurn = false;
       });
 
-      // Regla obligatoria de banca para la IA si quedó sin personajes en campo
-      const remainingOppChars = (playtestState.opponentSlots || []).filter(s => s && s.character).length;
-      if (remainingOppChars === 0 && playtestState.opponentDeck.length > 0) {
-        const benchCharIdx = playtestState.opponentDeck.findIndex(id => root.cardsDatabase[id]?.tipo === 'Personaje' && root.cardsDatabase[id]?.clase !== 'Avanzada');
-        if (benchCharIdx !== -1) {
-          const placedBench = playtestState.opponentDeck.splice(benchCharIdx, 1)[0];
-          if (!playtestState.opponentBench) playtestState.opponentBench = [];
-          playtestState.opponentBench.push({ id: placedBench, effectUsed: false });
-          log(`🏛️ [Regla de Banca IA] Al no controlar personajes activos, la IA colocó a <strong>${root.cardsDatabase[placedBench]?.nombre}</strong> en su banca desde su deck.`, 'var(--accent-purple)');
-          if (typeof root.checkMatchEndCondition === 'function') {
-            const mEnd = root.checkMatchEndCondition();
-            if (mEnd && mEnd.ended) return true;
-          }
-        }
-      }
-
       log(`🏁 [IA] Finalizó su turno. Turno transferido al <strong>Jugador</strong>.`, 'var(--accent-cyan)');
       await delay(600);
 
