@@ -38213,30 +38213,36 @@ function openCardChooserModal(cardIds, title, onSelect, onCancel = null) {
       div.appendChild(badge);
     }
 
-    div.addEventListener('click', () => {
+    div.addEventListener('click', (e) => {
+      if (e && typeof e.stopPropagation === 'function') {
+        e.stopPropagation();
+      }
       if (window.AnimationEngine && window.AnimationEngine.SoundFX) {
         window.AnimationEngine.SoundFX.playSelect();
       }
       if (onKeyDown) document.removeEventListener('keydown', onKeyDown);
-      onSelect(index);
       overlay.remove();
+      onSelect(index);
     });
     grid.appendChild(div);
   });
 
   let onKeyDown = null;
   if (onCancel) {
-    const handleCancel = () => {
+    const handleCancel = (e) => {
+      if (e && typeof e.stopPropagation === 'function') {
+        e.stopPropagation();
+      }
       if (onKeyDown) document.removeEventListener('keydown', onKeyDown);
       overlay.remove();
       if (typeof onCancel === 'function') onCancel();
     };
     onKeyDown = (e) => {
-      if (e.key === 'Escape') handleCancel();
+      if (e.key === 'Escape') handleCancel(e);
     };
     document.addEventListener('keydown', onKeyDown);
     overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) handleCancel();
+      if (e.target === overlay) handleCancel(e);
     });
     const closeBtn = overlay.querySelector('#chooser-modal-close-btn');
     if (closeBtn) closeBtn.addEventListener('click', handleCancel);
@@ -38363,7 +38369,10 @@ function openMultiCardChooserModal(cardIds, title, qty, onConfirm, onCancel) {
         div.appendChild(oBadge);
       }
 
-      div.addEventListener('click', () => {
+      div.addEventListener('click', (e) => {
+        if (e && typeof e.stopPropagation === 'function') {
+          e.stopPropagation();
+        }
         if (typeof window !== 'undefined' && window.AnimationEngine && window.AnimationEngine.SoundFX) {
           window.AnimationEngine.SoundFX.playSelect();
         }
@@ -38382,29 +38391,35 @@ function openMultiCardChooserModal(cardIds, title, qty, onConfirm, onCancel) {
   };
 
   let onKeyDown = null;
-  confirmBtn.addEventListener('click', () => {
+  confirmBtn.addEventListener('click', (e) => {
+    if (e && typeof e.stopPropagation === 'function') {
+      e.stopPropagation();
+    }
     if (selectedIndices.length === qty) {
       if (typeof window !== 'undefined' && window.AnimationEngine && window.AnimationEngine.SoundFX) {
         window.AnimationEngine.SoundFX.playSelect();
       }
       if (onKeyDown) document.removeEventListener('keydown', onKeyDown);
-      onConfirm(selectedIndices);
       overlay.remove();
+      onConfirm(selectedIndices);
     }
   });
 
   if (onCancel) {
-    const handleCancel = () => {
+    const handleCancel = (e) => {
+      if (e && typeof e.stopPropagation === 'function') {
+        e.stopPropagation();
+      }
       if (onKeyDown) document.removeEventListener('keydown', onKeyDown);
       overlay.remove();
       if (typeof onCancel === 'function') onCancel();
     };
     onKeyDown = (e) => {
-      if (e.key === 'Escape') handleCancel();
+      if (e.key === 'Escape') handleCancel(e);
     };
     document.addEventListener('keydown', onKeyDown);
     overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) handleCancel();
+      if (e.target === overlay) handleCancel(e);
     });
     const closeBtn = overlay.querySelector('#multi-chooser-close-btn');
     if (closeBtn) closeBtn.addEventListener('click', handleCancel);
@@ -38531,7 +38546,10 @@ function openUpToCardChooserModal(cardIds, title, maxQty, onConfirm) {
         div.appendChild(oBadge);
       }
 
-      div.addEventListener('click', () => {
+      div.addEventListener('click', (e) => {
+        if (e && typeof e.stopPropagation === 'function') {
+          e.stopPropagation();
+        }
         if (typeof window !== 'undefined' && window.AnimationEngine && window.AnimationEngine.SoundFX) {
           window.AnimationEngine.SoundFX.playSelect();
         }
@@ -38549,13 +38567,16 @@ function openUpToCardChooserModal(cardIds, title, maxQty, onConfirm) {
     confirmBtn.disabled = selectedIndices.length === 0 || selectedIndices.length > maxQty;
   };
 
-  confirmBtn.addEventListener('click', () => {
+  confirmBtn.addEventListener('click', (e) => {
+    if (e && typeof e.stopPropagation === 'function') {
+      e.stopPropagation();
+    }
     if (selectedIndices.length >= 1 && selectedIndices.length <= maxQty) {
       if (typeof window !== 'undefined' && window.AnimationEngine && window.AnimationEngine.SoundFX) {
         window.AnimationEngine.SoundFX.playSelect();
       }
-      onConfirm(selectedIndices);
       overlay.remove();
+      onConfirm(selectedIndices);
     }
   });
 
@@ -38643,7 +38664,10 @@ function openCardOrderChooserModal(cardIds, title, onConfirm) {
         div.style.boxShadow = 'none';
       }
 
-      div.addEventListener('click', () => {
+      div.addEventListener('click', (e) => {
+        if (e && typeof e.stopPropagation === 'function') {
+          e.stopPropagation();
+        }
         if (typeof window !== 'undefined' && window.AnimationEngine && window.AnimationEngine.SoundFX) {
           window.AnimationEngine.SoundFX.playSelect();
         }
@@ -38661,13 +38685,16 @@ function openCardOrderChooserModal(cardIds, title, onConfirm) {
     confirmBtn.disabled = selectedIndices.length !== totalCards;
   };
 
-  confirmBtn.addEventListener('click', () => {
+  confirmBtn.addEventListener('click', (e) => {
+    if (e && typeof e.stopPropagation === 'function') {
+      e.stopPropagation();
+    }
     if (selectedIndices.length === totalCards) {
       if (typeof window !== 'undefined' && window.AnimationEngine && window.AnimationEngine.SoundFX) {
         window.AnimationEngine.SoundFX.playSelect();
       }
-      onConfirm(selectedIndices);
       overlay.remove();
+      onConfirm(selectedIndices);
     }
   });
 
@@ -38802,6 +38829,9 @@ function showGraveModal() {
       
       // Permitir interactuar con las cartas del cementerio (devolver a la mano o activar efectos)
       div.addEventListener('click', (e) => {
+        if (e && typeof e.stopPropagation === 'function') {
+          e.stopPropagation();
+        }
         const isPlayerTurn = playtestState.turnOwner === 'player';
         const isDesenfreno = id === 'BBX-SP026';
         const oppHas5SkillsChar = playtestState.opponentSlots.some(s => s.character && s.skills.length >= 5);
@@ -39145,6 +39175,9 @@ function showOpponentGraveModal() {
       div.innerHTML = `<img src="/imagenes/${card.imagen}" alt="${card.nombre}">`;
       
       div.addEventListener('click', (e) => {
+        if (e && typeof e.stopPropagation === 'function') {
+          e.stopPropagation();
+        }
         if (playtestState.isDuelVsAI) {
           if (typeof showCardDetail === 'function') showCardDetail(card);
           const items = [
@@ -48933,52 +48966,39 @@ function executeFloreteSP371Activation(activatorOwner = 'player', testOptions = 
     return;
   }
 
-  // Modo Jugador: menú interactivo
-  const selectTarget = () => {
-    if (candidates.length === 1) {
-      doSendFieldSkill(candidates[0]);
-    } else if (typeof openCardChooserModal === 'function') {
-      const chooserTargets = candidates.map(c => ({
-        id: c.id,
-        owner: c.owner,
-        from: 'field',
-        charName: c.charName,
-        text: c.text
-      }));
-      openCardChooserModal(chooserTargets, "Florete (BBX-SP371): Selecciona 1 Skill portada para enviar al cementerio", (chosenIdx) => {
+  // Modo Jugador: selección visual directa de la Skill portada mediante el modal de cartas
+  const chooserTargets = candidates.map(c => ({
+    id: c.id,
+    owner: c.owner,
+    from: 'field',
+    charName: c.charName,
+    text: c.text
+  }));
+
+  const handleCancelFlorete = () => {
+    if (isPlayer) {
+      playtestState.usedFlorete371ThisTurn = false;
+      if (playtestState.usedGlobalEffects) {
+        const gIdx = playtestState.usedGlobalEffects.lastIndexOf('BBX-SP371');
+        if (gIdx !== -1) playtestState.usedGlobalEffects.splice(gIdx, 1);
+      }
+    }
+    addLog(`${tag} Cancelaste la selección de Skill portada.`, 'var(--text-muted)');
+    updatePlaytestView();
+    if (typeof onDone === 'function') onDone();
+  };
+
+  if (typeof openCardChooserModal === 'function') {
+    openCardChooserModal(
+      chooserTargets,
+      "Florete (BBX-SP371): Selecciona 1 Skill portada para enviar al cementerio",
+      (chosenIdx) => {
         doSendFieldSkill(candidates[chosenIdx]);
-      });
-    } else {
-      doSendFieldSkill(candidates[0]);
-    }
-  };
-
-  const dummyEvent = {
-    clientX: (typeof window !== 'undefined' ? window.innerWidth / 2 - 140 : 0),
-    clientY: (typeof window !== 'undefined' ? window.innerHeight / 2 - 80 : 0)
-  };
-
-  const promptItems = [
-    {
-      text: "💥 Enviar 1 Skill portada al cementerio",
-      action: () => {
-        selectTarget();
-      }
-    },
-    {
-      text: "❌ No enviar ninguna Skill portada al cementerio",
-      action: () => {
-        addLog(`${tag} Decidiste no enviar ninguna Skill portada al cementerio.`, 'var(--text-muted)');
-        updatePlaytestView();
-        if (typeof onDone === 'function') onDone();
-      }
-    }
-  ];
-
-  if (typeof showContextMenu === 'function') {
-    showContextMenu(dummyEvent, promptItems);
+      },
+      handleCancelFlorete
+    );
   } else {
-    selectTarget();
+    doSendFieldSkill(candidates[0]);
   }
 }
 
@@ -56454,68 +56474,62 @@ function executeLynaSP425Activation(activatorOwner = 'player', handIndex = -1, t
     }
 
     // Modo Jugador:
-    // Preguntar interactivamente con menú de confirmación opcional ("puedes portar")
-    const promptItems = [
-      {
-        text: `⚔️ Portar 1 Skill propia de Lyna desde tu deck (${eligibleDeckSkills.length} disponible(s))`,
-        action: () => {
-          const onSkillChosen = (chosenSkillItem) => {
-            const skCard = cardsDatabase[chosenSkillItem.id];
-            // Filtrar slots que pueden portar esta skill
-            const validSlots = controlledSlots.filter(cs => canCarryLynaSkill(skCard, cardsDatabase[cs.slot.character]));
+    // Mostrar directamente el selector modal con las Skills propias de Lyna en el deck (con opción de cancelar / no portar)
+    const chooserTargets = eligibleDeckSkills.map(e => ({
+      id: e.id,
+      from: 'deck',
+      owner: 'player'
+    }));
 
-            if (validSlots.length === 0) {
-              alert(`Ninguno de tus Personajes en campo puede portar "${chosenSkillItem.name}".`);
-              updatePlaytestView();
-              if (typeof onDone === 'function') onDone(true, { success: true, equipped: false });
-              return;
-            }
+    const onSkillChosen = (chosenSkillItem) => {
+      const skCard = cardsDatabase[chosenSkillItem.id];
+      // Filtrar slots que pueden portar esta skill
+      const validSlots = controlledSlots.filter(cs => canCarryLynaSkill(skCard, cardsDatabase[cs.slot.character]));
 
-            if (validSlots.length === 1) {
-              doAttach(chosenSkillItem.id, validSlots[0].slotIndex);
-            } else {
-              // Múltiples slots compatibles: menú para elegir a cuál portar
-              const slotOptions = validSlots.map(vs => ({
-                text: `👤 Portar en ${cardsDatabase[vs.slot.character]?.nombre || 'Personaje'} (Slot ${vs.slotIndex + 1})`,
-                action: () => {
-                  doAttach(chosenSkillItem.id, vs.slotIndex);
-                }
-              }));
-              const dummyEvent = { clientX: window.innerWidth / 2 - 120, clientY: window.innerHeight / 2 - 60 };
-              showContextMenu(dummyEvent, slotOptions);
-            }
-          };
-
-          if (eligibleDeckSkills.length === 1) {
-            onSkillChosen(eligibleDeckSkills[0]);
-          } else {
-            const chooserTargets = eligibleDeckSkills.map(e => ({
-              id: e.id,
-              from: 'deck',
-              owner: 'player'
-            }));
-            openCardChooserModal(chooserTargets, "Lyna (SP425): Selecciona 1 Skill propia de Lyna para portar", (chosenIdx) => {
-              onSkillChosen(eligibleDeckSkills[chosenIdx]);
-            }, () => {
-              addLog(`${tag} Decidiste no portar ninguna Skill propia de Lyna.`, 'var(--text-muted)');
-              updatePlaytestView();
-              if (typeof onDone === 'function') onDone(true, { success: true, equipped: false });
-            });
-          }
-        }
-      },
-      {
-        text: `❌ No portar ninguna Skill`,
-        action: () => {
-          addLog(`${tag} Decidiste no portar ninguna Skill propia de Lyna.`, 'var(--text-muted)');
-          updatePlaytestView();
-          if (typeof onDone === 'function') onDone(true, { success: true, equipped: false });
-        }
+      if (validSlots.length === 0) {
+        alert(`Ninguno de tus Personajes en campo puede portar "${chosenSkillItem.name}".`);
+        updatePlaytestView();
+        if (typeof onDone === 'function') onDone(true, { success: true, equipped: false });
+        return;
       }
-    ];
 
-    const dummyEvent = { clientX: window.innerWidth / 2 - 140, clientY: window.innerHeight / 2 - 80 };
-    showContextMenu(dummyEvent, promptItems);
+      if (validSlots.length === 1) {
+        doAttach(chosenSkillItem.id, validSlots[0].slotIndex);
+      } else {
+        // Múltiples slots compatibles: selector modal para elegir a qué Personaje portar
+        const charTargets = validSlots.map(vs => ({
+          id: vs.slot.character,
+          owner: 'player',
+          slotIdx: vs.slotIndex,
+          charName: cardsDatabase[vs.slot.character]?.nombre || 'Personaje'
+        }));
+        openCardChooserModal(
+          charTargets,
+          `Lyna (SP425): Selecciona a qué Personaje portar "${cardsDatabase[chosenSkillItem.id]?.nombre || chosenSkillItem.id}"`,
+          (targetIdx) => {
+            doAttach(chosenSkillItem.id, validSlots[targetIdx].slotIndex);
+          },
+          () => {
+            addLog(`${tag} Decidiste no portar ninguna Skill propia de Lyna.`, 'var(--text-muted)');
+            updatePlaytestView();
+            if (typeof onDone === 'function') onDone(true, { success: true, equipped: false });
+          }
+        );
+      }
+    };
+
+    openCardChooserModal(
+      chooserTargets,
+      "Lyna (SP425): Selecciona 1 Skill propia de Lyna de tu deck para portar",
+      (chosenIdx) => {
+        onSkillChosen(eligibleDeckSkills[chosenIdx]);
+      },
+      () => {
+        addLog(`${tag} Decidiste no portar ninguna Skill propia de Lyna.`, 'var(--text-muted)');
+        updatePlaytestView();
+        if (typeof onDone === 'function') onDone(true, { success: true, equipped: false });
+      }
+    );
   };
 
   // Paso 1: Enviar 1 Skill portada al cementerio

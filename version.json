@@ -1,9 +1,9 @@
 {
-  "version": "1.1.7",
-  "version_code": 10,
+  "version": "1.1.8",
+  "version_code": 11,
   "release_date": "2026-10-16",
   "name": "Skill Blast X",
-  "description": "Exclusión de Personajes Avanzados de la penalización de banca por fin de turno sin personajes, deduplicación de mazo de IA y soporte multiplataforma.",
+  "description": "Corrección de activación de Florete (SP371) desde el cementerio y flujo visual de Lyna (SP425) para portar Skills del deck.",
   "repo_url": "https://github.com/luisfelipehernandez/SkillBlastX",
   "raw_base_url": "https://raw.githubusercontent.com/luisfelipehernandez/SkillBlastX/main/"
 }
