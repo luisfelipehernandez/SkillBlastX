@@ -73,8 +73,25 @@ if (typeof global !== 'undefined') global.playtestState = playtestState;
 window.addEventListener('DOMContentLoaded', () => {
   loadCardsData();
   setupGlobalEvents();
+  loadAppVersionBadge();
   showScreen('main-menu');
 });
+
+async function loadAppVersionBadge() {
+  const badge = document.getElementById('app-brand-badge');
+  if (!badge) return;
+  try {
+    const res = await fetch('/version.json');
+    if (res.ok) {
+      const vdata = await res.json();
+      if (vdata && vdata.version) {
+        badge.textContent = `BETA v${vdata.version} • 429 CARTAS REGISTRADAS`;
+      }
+    }
+  } catch (e) {
+    // Fallback silencioso
+  }
+}
 
 // Setup de eventos globales (ej. cerrar menú contextual, drag & drop de zonas de mazo)
 function setupGlobalEvents() {

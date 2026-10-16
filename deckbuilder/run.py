@@ -172,6 +172,16 @@ def get_cards_json():
     response.set_header('Expires', '0')
     return static_file('cartas.json', root=EXTERNAL_DIR)
 
+@app.route('/version.json')
+def get_version_json():
+    response.set_header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
+    response.set_header('Pragma', 'no-cache')
+    response.set_header('Expires', '0')
+    v_ext = os.path.join(EXTERNAL_DIR, 'version.json')
+    if os.path.exists(v_ext):
+        return static_file('version.json', root=EXTERNAL_DIR)
+    return static_file('version.json', root=BASE_DIR)
+
 @app.route('/imagenes/<filename:path>')
 def get_image(filename):
     return static_file(filename, root=os.path.join(EXTERNAL_DIR, 'imagenes'))
