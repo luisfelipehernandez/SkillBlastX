@@ -303,6 +303,21 @@ window.RulesEngine = {
     const cardName = card ? card.nombre : cardId;
     const isSkill = card ? card.tipo === 'Skill' : cardId?.startsWith('BBX-SP');
 
+    // Verificación de Próximo destino (BBX-SP406) para Skills en cualquier zona (campo, mano, cementerio, banca)
+    if (isSkill) {
+      const isBlockedByProximo = typeof isSkillBlockedByProximoDestino === 'function'
+        ? isSkillBlockedByProximoDestino(cardId, owner)
+        : (typeof window !== 'undefined' && typeof window.isSkillBlockedByProximoDestino === 'function'
+          ? window.isSkillBlockedByProximoDestino(cardId, owner)
+          : false);
+      if (isBlockedByProximo) {
+        if (typeof addLog === 'function') {
+          addLog(`[Efecto ${cardName}] Bloqueado por Próximo destino (BBX-SP406): Ya activaste el efecto de una Skill con el mismo nombre este turno.`, 'var(--text-muted)');
+        }
+        return { allowed: false, reason: 'ProximoDestino' };
+      }
+    }
+
     // 1. Zona CEMENTERIO
     if (zone === 'grave') {
       if (this.isAnheloGraveBlocked(owner)) {

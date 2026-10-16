@@ -3261,11 +3261,15 @@ function toggleTurnOwner(isOnlineEndTurn = false) {
     if (previousOwner === 'player') {
       const hasActiveFieldChar = playtestState.slots.some(s => s && s.character);
       if (!hasActiveFieldChar) {
-        const charsInDeck = playtestState.deck.filter(id => cardsDatabase[id] && cardsDatabase[id].tipo === 'Personaje');
+        const isEligibleBenchChar = (id) => {
+          const c = cardsDatabase[id];
+          return c && c.tipo === 'Personaje' && c.clase !== 'Avanzada' && c.clase !== 'Avanzado' && !(c.clase && c.clase.toLowerCase().includes('avanzad'));
+        };
+        const charsInDeck = playtestState.deck.filter(isEligibleBenchChar);
         if (charsInDeck.length > 0) {
-          addLog("<strong>[Regla Obligatoria de Banca]</strong> Al concluir todos los efectos de final de turno no controlas ningún Personaje activo en juego: debes colocar 1 Personaje desde tu deck en tu banca (como si fuera destruido por batalla).", 'var(--accent-cyan)');
+          addLog("<strong>[Regla Obligatoria de Banca]</strong> Al concluir todos los efectos de final de turno no controlas ningún Personaje activo en juego: debes colocar 1 Personaje básico desde tu deck en tu banca (los Personajes Avanzados no pueden ser enviados a la banca por esta regla).", 'var(--accent-cyan)');
           
-          openCardChooserModal(charsInDeck, "Regla Obligatoria de Banca: Selecciona 1 Personaje de tu deck para colocar en tu Banca", (chosenIdx) => {
+          openCardChooserModal(charsInDeck, "Regla Obligatoria de Banca: Selecciona 1 Personaje básico de tu deck para colocar en tu Banca (no Avanzados)", (chosenIdx) => {
             if (mandatoryBenchPenaltyApplied) return;
             mandatoryBenchPenaltyApplied = true;
             const chosenId = charsInDeck[chosenIdx];
@@ -3296,14 +3300,14 @@ function toggleTurnOwner(isOnlineEndTurn = false) {
           });
           return;
         } else {
-          // No quedan personajes en el deck: ¡Pierdes el duelo de inmediato!
+          // No quedan personajes básicos en el deck: ¡Pierdes el duelo de inmediato!
           mandatoryBenchPenaltyApplied = true;
           playtestState.matchEnded = true;
-          addLog("❌ <strong>DERROTA</strong>: Has finalizado tu turno sin ningún Personaje activo en juego y no te quedan Personajes en tu deck para colocar en la banca. ¡Has perdido la partida!", 'var(--accent-danger)');
+          addLog("❌ <strong>DERROTA</strong>: Has finalizado tu turno sin ningún Personaje activo en juego y no te quedan Personajes básicos en tu deck para colocar en la banca (los Personajes Avanzados no pueden enviarse a la banca por esta regla). ¡Has perdido la partida!", 'var(--accent-danger)');
           if (typeof adjustBo3Score === 'function') {
             adjustBo3Score('defeats', 1);
           }
-          showMatchEndModal(false, "DERROTA", "Terminaste tu turno sin Personajes en tu campo y no te quedan Personajes en tu deck para colocar en la banca.\n¡Has perdido el duelo!");
+          showMatchEndModal(false, "DERROTA", "Terminaste tu turno sin Personajes en tu campo y no te quedan Personajes básicos en tu deck para colocar en la banca.\n(Los Personajes Avanzados no pueden enviarse a la banca por esta regla).\n¡Has perdido el duelo!");
           updatePlaytestView();
           return;
         }
@@ -3311,7 +3315,11 @@ function toggleTurnOwner(isOnlineEndTurn = false) {
     } else if (previousOwner === 'opponent' && !playtestState.isOnlineMatch) {
       const hasOppActiveFieldChar = playtestState.opponentSlots.some(s => s && s.character);
       if (!hasOppActiveFieldChar) {
-        const oppCharsInDeck = playtestState.opponentDeck.filter(id => cardsDatabase[id] && cardsDatabase[id].tipo === 'Personaje');
+        const isEligibleBenchChar = (id) => {
+          const c = cardsDatabase[id];
+          return c && c.tipo === 'Personaje' && c.clase !== 'Avanzada' && c.clase !== 'Avanzado' && !(c.clase && c.clase.toLowerCase().includes('avanzad'));
+        };
+        const oppCharsInDeck = playtestState.opponentDeck.filter(isEligibleBenchChar);
         if (oppCharsInDeck.length > 0) {
           mandatoryBenchPenaltyApplied = true;
           const chosenId = oppCharsInDeck[0];
@@ -3325,14 +3333,14 @@ function toggleTurnOwner(isOnlineEndTurn = false) {
           updatePlaytestView();
           if (playtestState.matchEnded) return;
         } else {
-          // No quedan personajes en el deck rival: ¡Victoria para el jugador!
+          // No quedan personajes básicos en el deck rival: ¡Victoria para el jugador!
           mandatoryBenchPenaltyApplied = true;
           playtestState.matchEnded = true;
-          addLog("🏆 <strong>¡VICTORIA!</strong> El rival ha finalizado su turno sin ningún Personaje activo en juego y no le quedan Personajes en su deck para colocar en la banca. ¡Has ganado la partida!", 'var(--accent-cyan)');
+          addLog("🏆 <strong>¡VICTORIA!</strong> El rival ha finalizado su turno sin ningún Personaje activo en juego y no le quedan Personajes básicos en su deck para colocar en la banca. ¡Has ganado la partida!", 'var(--accent-cyan)');
           if (typeof adjustBo3Score === 'function') {
             adjustBo3Score('victories', 1);
           }
-          showMatchEndModal(true, "¡VICTORIA!", "El oponente terminó su turno sin Personajes en su campo y no le quedan Personajes en su deck para colocar en la banca.\n¡Has ganado el duelo!");
+          showMatchEndModal(true, "¡VICTORIA!", "El oponente terminó su turno sin Personajes en su campo y no le quedan Personajes básicos en su deck para colocar en la banca.\n¡Has ganado el duelo!");
           updatePlaytestView();
           return;
         }
@@ -21452,6 +21460,12 @@ window.isProximoDestinoActiveOnField = isProximoDestinoActiveOnField;
 window.getActivatedSkillNamesThisTurn = getActivatedSkillNamesThisTurn;
 window.isSkillBlockedByProximoDestino = isSkillBlockedByProximoDestino;
 window.registerSkillActivation = registerSkillActivation;
+if (typeof global !== 'undefined') {
+  global.isProximoDestinoActiveOnField = isProximoDestinoActiveOnField;
+  global.getActivatedSkillNamesThisTurn = getActivatedSkillNamesThisTurn;
+  global.isSkillBlockedByProximoDestino = isSkillBlockedByProximoDestino;
+  global.registerSkillActivation = registerSkillActivation;
+}
 
 function equipSkill(cardId, handIndex, slotIndex) {
   if (playtestState.isOnlineMatch && playtestState.turnOwner !== 'player') {

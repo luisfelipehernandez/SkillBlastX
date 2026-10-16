@@ -1,9 +1,9 @@
 {
-  "version": "1.1.6",
-  "version_code": 9,
-  "release_date": "2026-10-15",
+  "version": "1.1.7",
+  "version_code": 10,
+  "release_date": "2026-10-16",
   "name": "Skill Blast X",
-  "description": "Corrección de selección de mazo IA (eliminado duplicado de Haruka), regla oficial de fin de turno sin personaje a la banca y mejoras de sincronización.",
+  "description": "Exclusión de Personajes Avanzados de la penalización de banca por fin de turno sin personajes, deduplicación de mazo de IA y soporte multiplataforma.",
   "repo_url": "https://github.com/luisfelipehernandez/SkillBlastX",
   "raw_base_url": "https://raw.githubusercontent.com/luisfelipehernandez/SkillBlastX/main/"
 }
