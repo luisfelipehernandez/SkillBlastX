@@ -200,11 +200,21 @@ async function populateDuelDecks() {
 
   // 1. Catálogo y carpeta exclusiva de mazos de la IA (mazos_ia/) para el rival
   const aiGroup = document.createElement('optgroup');
-  aiGroup.label = "🤖 Mazos de la IA (mazos_ia)";
+  aiGroup.label = "🤖 Mazos de la IA";
+
+  const registeredAiKeys = new Set();
 
   if (typeof AIDecks !== 'undefined') {
     Object.keys(AIDecks).forEach(key => {
       const d = AIDecks[key];
+      const normKey = key.toLowerCase().replace(/[^a-z0-9]/g, '');
+      registeredAiKeys.add(normKey);
+      if (d && d.id) {
+        registeredAiKeys.add(d.id.toLowerCase().replace(/[^a-z0-9]/g, ''));
+      }
+      if (d && d.name) {
+        registeredAiKeys.add(d.name.toLowerCase().replace(/[^a-z0-9]/g, ''));
+      }
       const opt = document.createElement('option');
       opt.value = `__ai__:${key}`;
       opt.textContent = `🤖 ${d.name}`;
@@ -218,7 +228,17 @@ async function populateDuelDecks() {
       const aiData = await aiResp.json();
       if (aiData && Array.isArray(aiData.mazos)) {
         aiData.mazos.sort().forEach(filename => {
-          const displayName = filename.replace('.json', '').replace(/_/g, ' ');
+          const normFile = filename.toLowerCase()
+            .replace(/\.json$/i, '')
+            .replace(/^ia[_-]/i, '')
+            .replace(/[^a-z0-9]/g, '');
+
+          // Evitar duplicar mazos que ya se registraron desde el catálogo oficial de AIDecks
+          if (registeredAiKeys.has(normFile)) {
+            return;
+          }
+
+          const displayName = filename.replace(/\.json$/i, '').replace(/^ia[_-]/i, '').replace(/_/g, ' ');
           const opt = document.createElement('option');
           opt.value = `__ai_file__:${filename}`;
           opt.textContent = `🤖 ${displayName}`;

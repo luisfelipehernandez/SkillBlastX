@@ -1,9 +1,9 @@
 {
-  "version": "1.1.5",
-  "version_code": 8,
+  "version": "1.1.6",
+  "version_code": 9,
   "release_date": "2026-10-15",
   "name": "Skill Blast X",
-  "description": "Regla obligatoria de banca por fin de turno sin personajes (1 personaje a la banca o derrota si mazo vacío), bloqueo de evolución Avanzada sobre Avanzada y fase automática.",
+  "description": "Corrección de selección de mazo IA (eliminado duplicado de Haruka), regla oficial de fin de turno sin personaje a la banca y mejoras de sincronización.",
   "repo_url": "https://github.com/luisfelipehernandez/SkillBlastX",
   "raw_base_url": "https://raw.githubusercontent.com/luisfelipehernandez/SkillBlastX/main/"
 }
