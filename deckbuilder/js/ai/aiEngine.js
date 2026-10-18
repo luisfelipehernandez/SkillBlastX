@@ -71,6 +71,21 @@
 
       const delay = (ms) => ((options && options.skipDelay) ? Promise.resolve() : new Promise(resolve => setTimeout(resolve, ms)));
 
+      const waitForPendingModalsAndMenus = async (maxWaitMs = 300000) => {
+        if (typeof document === 'undefined') return;
+        const start = Date.now();
+        while (Date.now() - start < maxWaitMs) {
+          if (playtestState.matchEnded) break;
+          const hasModal = !!document.querySelector('.modal-overlay');
+          const menuEl = document.getElementById('card-context-menu');
+          const hasMenu = menuEl && !menuEl.classList.contains('hidden');
+          if (!hasModal && !hasMenu) {
+            break;
+          }
+          await delay(200);
+        }
+      };
+
       log(`🤖 <strong>[Turno de la IA: ${executor.name}]</strong> Iniciando secuencia táctica...`, 'var(--accent-purple)');
       await delay(700);
 
@@ -344,8 +359,15 @@
           const victimSlot = playtestState.slots[battlePlan.targetSlotIndex];
 
           if (attackerSlot && victimSlot && attackerSlot.character && victimSlot.character) {
-            if (root.BattleEngine && typeof root.BattleEngine.executeAttack === 'function') {
-              root.BattleEngine.executeAttack(battlePlan.attackerSlotIndex, battlePlan.targetSlotIndex, 'opponent');
+            if (root.BattleEngine && typeof root.BattleEngine.executeAttackAsync === 'function') {
+              await root.BattleEngine.executeAttackAsync(battlePlan.attackerSlotIndex, battlePlan.targetSlotIndex, 'opponent');
+            } else if (root.BattleEngine && typeof root.BattleEngine.executeAttack === 'function') {
+              await new Promise(resolve => {
+                const started = root.BattleEngine.executeAttack(battlePlan.attackerSlotIndex, battlePlan.targetSlotIndex, 'opponent', {}, (success, matchEnd) => {
+                  resolve({ success, matchEnd });
+                });
+                if (!started) resolve({ success: false });
+              });
             } else {
               attackerSlot.attackedThisTurn = true;
               attackerSlot.isRotated = true; // Girar personaje atacante
@@ -376,13 +398,17 @@
               }
             }
 
+            // Esperar obligatoriamente a que el jugador termine cualquier selección modal o menú de daño/reacción
+            await waitForPendingModalsAndMenus();
+            await delay(400);
+
             if (typeof root.checkMatchEndCondition === 'function') {
               const mEnd = root.checkMatchEndCondition();
               if (mEnd && mEnd.ended) break;
             }
 
             if (typeof root.updatePlaytestView === 'function') root.updatePlaytestView();
-            await delay(900);
+            await delay(500);
           }
           maxAttacks--;
         }
@@ -391,6 +417,9 @@
       // -----------------------------------------------------------------------
       // PASO 7: Final de Turno y Traspaso
       // -----------------------------------------------------------------------
+      // Asegurar que no quede ningún modal ni menú abierto antes de finalizar turno
+      await waitForPendingModalsAndMenus();
+
       if (playtestState.matchEnded) {
         log(`🏁 [Fin de Partida] El duelo ha finalizado.`, 'var(--accent-cyan)');
         return true;

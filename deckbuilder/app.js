@@ -44,6 +44,8 @@ let playtestState = {
   opponentApagonCountThisTurn: 0,
   ocasoDelPasadoUsedThisTurn: false,
   opponentOcasoDelPasadoUsedThisTurn: false,
+  ocasoDelPasadoSentToGraveThisTurn: 0,
+  opponentOcasoDelPasadoSentToGraveThisTurn: 0,
   opponentBorealInsidiosaUsedThisTurn: false,
   usedNostalgia351ThisTurn: false,
   opponentUsedNostalgia351ThisTurn: false,
@@ -1440,6 +1442,9 @@ function attachGraveyardInterceptors() {
         if (id === 'BBX-SP263') {
           playtestState.apagonCountThisTurn = (playtestState.apagonCountThisTurn || 0) + 1;
         }
+        if (id === 'BBX-SP265') {
+          playtestState.ocasoDelPasadoSentToGraveThisTurn = (playtestState.ocasoDelPasadoSentToGraveThisTurn || 0) + 1;
+        }
         if (id === 'BBX-SP293') {
           playtestState.desertarCountThisTurn = (playtestState.desertarCountThisTurn || 0) + 1;
         }
@@ -1474,6 +1479,9 @@ function attachGraveyardInterceptors() {
         }
         if (id === 'BBX-SP263') {
           playtestState.opponentApagonCountThisTurn = (playtestState.opponentApagonCountThisTurn || 0) + 1;
+        }
+        if (id === 'BBX-SP265') {
+          playtestState.opponentOcasoDelPasadoSentToGraveThisTurn = (playtestState.opponentOcasoDelPasadoSentToGraveThisTurn || 0) + 1;
         }
         if (id === 'BBX-SP293') {
           playtestState.opponentDesertarCountThisTurn = (playtestState.opponentDesertarCountThisTurn || 0) + 1;
@@ -2384,6 +2392,8 @@ function startNewTurn() {
   playtestState.opponentApagonCountThisTurn = 0;
   playtestState.ocasoDelPasadoUsedThisTurn = false;
   playtestState.opponentOcasoDelPasadoUsedThisTurn = false;
+  playtestState.ocasoDelPasadoSentToGraveThisTurn = 0;
+  playtestState.opponentOcasoDelPasadoSentToGraveThisTurn = 0;
   playtestState.desenfundarUsedThisTurn = false;
   playtestState.opponentDesenfundarUsedThisTurn = false;
   playtestState.descuidoUsedThisTurn = false;
@@ -2465,6 +2475,28 @@ function toggleTurnOwner(isOnlineEndTurn = false) {
   if (typeof window !== 'undefined' && window.AnimationEngine && typeof window.AnimationEngine.updatePhase === 'function') {
     window.AnimationEngine.updatePhase('end');
   }
+
+  // Watchdog de seguridad para evitar bloqueos permanentes en Fase Final
+  if (window._turnTransitionWatchdog) {
+    clearTimeout(window._turnTransitionWatchdog);
+  }
+  window._turnTransitionWatchdog = setTimeout(() => {
+    if (playtestState.turnTransitionInProgress) {
+      const hasModal = typeof document !== 'undefined' && !!document.querySelector('.modal-overlay');
+      const menuEl = typeof document !== 'undefined' && document.getElementById('card-context-menu');
+      const hasMenu = menuEl && !menuEl.classList.contains('hidden');
+      if (!hasModal && !hasMenu) {
+        console.warn("Watchdog: Transición de turno demorada sin modales ni menús activos. Forzando avance.");
+        playtestState.turnTransitionInProgress = false;
+        if (typeof proceedToNextTurn === 'function') {
+          proceedToNextTurn();
+        } else {
+          if (typeof updateTurnBadgeUI === 'function') updateTurnBadgeUI();
+        }
+      }
+    }
+  }, 12000);
+
   const previousOwner = playtestState.turnOwner;
 
   // Trigger de fin de turno para ¡Rencor! (BBX-SP068)
@@ -2618,7 +2650,9 @@ function toggleTurnOwner(isOnlineEndTurn = false) {
 
       addLog(`[Trigger] Puedes activar el efecto de mano de <strong>Marina</strong> al final del turno para enviar 1 Skill portada al cementerio.`, 'var(--accent-cyan)');
       const dummyEvent = { clientX: window.innerWidth / 2 - 120, clientY: window.innerHeight / 2 - 80 };
-      showContextMenu(dummyEvent, items);
+      showContextMenu(dummyEvent, items, () => {
+        proceedToNext();
+      });
       return;
     }
 
@@ -2671,7 +2705,10 @@ function toggleTurnOwner(isOnlineEndTurn = false) {
 
       addLog(`[Trigger] Puedes activar el efecto de fin de turno de <strong>Ascenso arcano</strong> al haber sido enviada al cementerio este turno.`, 'var(--accent-cyan)');
       const dummyEvent = { clientX: window.innerWidth / 2 - 120, clientY: window.innerHeight / 2 - 80 };
-      showContextMenu(dummyEvent, items);
+      showContextMenu(dummyEvent, items, () => {
+        playtestState.ascensoArcanoCountThisTurn = 0;
+        nextCallback();
+      });
       return;
     }
 
@@ -2735,7 +2772,10 @@ function toggleTurnOwner(isOnlineEndTurn = false) {
 
       addLog(`[Trigger] Puedes activar el efecto de fin de turno de <strong>Descanso</strong> al haber sido enviada al cementerio este turno.`, 'var(--accent-cyan)');
       const dummyEvent = { clientX: window.innerWidth / 2 - 120, clientY: window.innerHeight / 2 - 80 };
-      showContextMenu(dummyEvent, items);
+      showContextMenu(dummyEvent, items, () => {
+        playtestState.descansoCountThisTurn = 0;
+        checkDescansoOrProceed(nextCallback);
+      });
       return;
     }
 
@@ -2793,7 +2833,10 @@ function toggleTurnOwner(isOnlineEndTurn = false) {
 
       addLog(`[Trigger] El oponente puede activar el efecto de fin de turno de <strong>Descanso</strong> al haber sido enviada a su cementerio este turno.`, 'var(--accent-cyan)');
       const dummyEvent = { clientX: window.innerWidth / 2 - 120, clientY: window.innerHeight / 2 - 80 };
-      showContextMenu(dummyEvent, oppItems);
+      showContextMenu(dummyEvent, oppItems, () => {
+        playtestState.opponentDescansoCountThisTurn = 0;
+        checkDescansoOrProceed(nextCallback);
+      });
       return;
     }
 
@@ -2848,7 +2891,9 @@ function toggleTurnOwner(isOnlineEndTurn = false) {
 
         addLog(`[Trigger] El oponente puede activar el efecto de banca de <strong>Katshi (SP242)</strong> al final del turno para enviar 1 Personaje Katshi de su deck al cementerio.`, 'var(--accent-cyan)');
         const dummyEvent = { clientX: window.innerWidth / 2 - 120, clientY: window.innerHeight / 2 - 80 };
-        showContextMenu(dummyEvent, oppItems);
+        showContextMenu(dummyEvent, oppItems, () => {
+          nextCallback();
+        });
         return;
       }
 
@@ -2901,7 +2946,9 @@ function toggleTurnOwner(isOnlineEndTurn = false) {
 
       addLog(`[Trigger] Puedes activar el efecto de banca de <strong>Katshi (SP242)</strong> al final del turno para enviar 1 Personaje Katshi de tu deck al cementerio.`, 'var(--accent-cyan)');
       const dummyEvent = { clientX: window.innerWidth / 2 - 120, clientY: window.innerHeight / 2 - 80 };
-      showContextMenu(dummyEvent, items);
+      showContextMenu(dummyEvent, items, () => {
+        checkOpponentBenchKatshi();
+      });
       return;
     }
 
@@ -2976,7 +3023,10 @@ function toggleTurnOwner(isOnlineEndTurn = false) {
 
       addLog(`[Trigger] Puedes activar el efecto de fin de turno de <strong>Apagón</strong> al haber sido enviada a tu cementerio este turno.`, 'var(--accent-cyan)');
       const dummyEvent = { clientX: window.innerWidth / 2 - 120, clientY: window.innerHeight / 2 - 80 };
-      showContextMenu(dummyEvent, items);
+      showContextMenu(dummyEvent, items, () => {
+        playtestState.apagonCountThisTurn = 0;
+        checkApagonOrProceed(nextCallback);
+      });
       return;
     }
 
@@ -3044,7 +3094,10 @@ function toggleTurnOwner(isOnlineEndTurn = false) {
 
       addLog(`[Trigger] El oponente puede activar el efecto de fin de turno de <strong>Apagón</strong> al haber sido enviada a su cementerio este turno.`, 'var(--accent-cyan)');
       const dummyEvent = { clientX: window.innerWidth / 2 - 120, clientY: window.innerHeight / 2 - 80 };
-      showContextMenu(dummyEvent, oppItems);
+      showContextMenu(dummyEvent, oppItems, () => {
+        playtestState.opponentApagonCountThisTurn = 0;
+        checkApagonOrProceed(nextCallback);
+      });
       return;
     }
 
@@ -3059,15 +3112,30 @@ function toggleTurnOwner(isOnlineEndTurn = false) {
         nextCallback();
         return;
       }
-      const oppHasOcaso = playtestState.opponentSlots.some(s => s.character && s.skills && s.skills.includes('BBX-SP265') && !isSkillEffectBlocked('BBX-SP265', 'opponent', s));
-      const oppEligibleSkills = isGraveToHandBlocked() ? [] : playtestState.opponentGrave.filter(isEligibleSkill);
+      const oppHasOcasoOnField = playtestState.opponentSlots.some(s => s.character && s.skills && s.skills.includes('BBX-SP265') && !isSkillEffectBlocked('BBX-SP265', 'opponent', s));
+      const oppHasOcasoSentThisTurn = (playtestState.opponentOcasoDelPasadoSentToGraveThisTurn || 0) > 0;
+      const oppHasOcaso = oppHasOcasoOnField || oppHasOcasoSentThisTurn;
+      const oppIsBlocked = isGraveToHandBlocked();
+      const oppEligibleSkills = oppIsBlocked ? [] : playtestState.opponentGrave.filter(isEligibleSkill);
 
-      if (!playtestState.opponentOcasoDelPasadoUsedThisTurn && oppHasOcaso && oppEligibleSkills.length > 0) {
+      if (!playtestState.opponentOcasoDelPasadoUsedThisTurn && oppHasOcaso) {
+        if (oppIsBlocked) {
+          addLog(`[Trigger Ocaso del pasado Rival] El efecto de fin de turno de Ocaso del pasado del rival no puede activarse (recuperar cartas del cementerio a la mano está bloqueado por Haruka BBX-SP014).`, 'var(--text-muted)');
+          nextCallback();
+          return;
+        }
+        if (oppEligibleSkills.length === 0) {
+          addLog(`[Trigger Ocaso del pasado Rival] El efecto de fin de turno de Ocaso del pasado del rival no puede activarse porque no tiene otras Skills en su cementerio como objetivo válido.`, 'var(--text-muted)');
+          nextCallback();
+          return;
+        }
+
         const oppItems = [
           {
             text: "⚡ [RIVAL] Activar Ocaso del pasado (Recuperar 1 Skill del cementerio rival)",
             action: () => {
               playtestState.opponentOcasoDelPasadoUsedThisTurn = true;
+              playtestState.opponentOcasoDelPasadoSentToGraveThisTurn = 0;
               const chooserTargets = oppEligibleSkills.map(id => ({ id, owner: 'opponent' }));
               openCardChooserModal(chooserTargets, "[Rival] Ocaso del pasado: Selecciona 1 Skill del cementerio rival para recuperar a su mano", (chosenIdx) => {
                 const chosenId = oppEligibleSkills[chosenIdx];
@@ -3088,6 +3156,7 @@ function toggleTurnOwner(isOnlineEndTurn = false) {
             text: "💥 [RIVAL] No activar Ocaso del pasado",
             action: () => {
               playtestState.opponentOcasoDelPasadoUsedThisTurn = true;
+              playtestState.opponentOcasoDelPasadoSentToGraveThisTurn = 0;
               addLog(`[Rival Ocaso del pasado] El oponente decidió no activar el efecto de Ocaso del pasado.`, 'var(--text-muted)');
               nextCallback();
             }
@@ -3096,22 +3165,41 @@ function toggleTurnOwner(isOnlineEndTurn = false) {
 
         addLog(`[Trigger] El oponente puede activar el efecto de fin de turno de <strong>Ocaso del pasado</strong> para recuperar 1 Skill de su cementerio.`, 'var(--accent-cyan)');
         const dummyEvent = { clientX: window.innerWidth / 2 - 120, clientY: window.innerHeight / 2 - 80 };
-        showContextMenu(dummyEvent, oppItems);
+        showContextMenu(dummyEvent, oppItems, () => {
+          playtestState.opponentOcasoDelPasadoUsedThisTurn = true;
+          playtestState.opponentOcasoDelPasadoSentToGraveThisTurn = 0;
+          nextCallback();
+        });
         return;
       }
 
       nextCallback();
     };
 
-    const playerHasOcaso = playtestState.slots.some(s => s.character && s.skills && s.skills.includes('BBX-SP265') && !isSkillEffectBlocked('BBX-SP265', 'player', s));
-    const playerEligibleSkills = isGraveToHandBlocked() ? [] : playtestState.grave.filter(isEligibleSkill);
+    const playerHasOcasoOnField = playtestState.slots.some(s => s.character && s.skills && s.skills.includes('BBX-SP265') && !isSkillEffectBlocked('BBX-SP265', 'player', s));
+    const playerHasOcasoSentThisTurn = (playtestState.ocasoDelPasadoSentToGraveThisTurn || 0) > 0;
+    const playerHasOcaso = playerHasOcasoOnField || playerHasOcasoSentThisTurn;
+    const playerIsBlocked = isGraveToHandBlocked();
+    const playerEligibleSkills = playerIsBlocked ? [] : playtestState.grave.filter(isEligibleSkill);
 
-    if (!playtestState.ocasoDelPasadoUsedThisTurn && playerHasOcaso && playerEligibleSkills.length > 0) {
+    if (!playtestState.ocasoDelPasadoUsedThisTurn && playerHasOcaso) {
+      if (playerIsBlocked) {
+        addLog(`[Trigger Ocaso del pasado] El efecto de fin de turno de Ocaso del pasado no puede activarse (recuperar cartas del cementerio a la mano está bloqueado por Haruka BBX-SP014).`, 'var(--text-muted)');
+        checkOpponentOcaso();
+        return;
+      }
+      if (playerEligibleSkills.length === 0) {
+        addLog(`[Trigger Ocaso del pasado] El efecto de fin de turno de Ocaso del pasado no puede activarse porque no tienes otras Skills en tu cementerio como objetivo válido (no puede seleccionarse a sí misma).`, 'var(--text-muted)');
+        checkOpponentOcaso();
+        return;
+      }
+
       const items = [
         {
           text: "⚡ Activar Ocaso del pasado (Recuperar 1 Skill de tu cementerio)",
           action: () => {
             playtestState.ocasoDelPasadoUsedThisTurn = true;
+            playtestState.ocasoDelPasadoSentToGraveThisTurn = 0;
             const chooserTargets = playerEligibleSkills.map(id => ({ id, owner: 'player' }));
             openCardChooserModal(chooserTargets, "Ocaso del pasado: Selecciona 1 Skill de tu cementerio para recuperar a tu mano", (chosenIdx) => {
               const chosenId = playerEligibleSkills[chosenIdx];
@@ -3132,6 +3220,7 @@ function toggleTurnOwner(isOnlineEndTurn = false) {
           text: "💥 No activar Ocaso del pasado",
           action: () => {
             playtestState.ocasoDelPasadoUsedThisTurn = true;
+            playtestState.ocasoDelPasadoSentToGraveThisTurn = 0;
             addLog(`[Efecto Ocaso del pasado] Decidiste no activar el efecto de Ocaso del pasado.`, 'var(--text-muted)');
             checkOpponentOcaso();
           }
@@ -3140,7 +3229,11 @@ function toggleTurnOwner(isOnlineEndTurn = false) {
 
       addLog(`[Trigger] Puedes activar el efecto de fin de turno de <strong>Ocaso del pasado</strong> para recuperar 1 Skill de tu cementerio.`, 'var(--accent-cyan)');
       const dummyEvent = { clientX: window.innerWidth / 2 - 120, clientY: window.innerHeight / 2 - 80 };
-      showContextMenu(dummyEvent, items);
+      showContextMenu(dummyEvent, items, () => {
+        playtestState.ocasoDelPasadoUsedThisTurn = true;
+        playtestState.ocasoDelPasadoSentToGraveThisTurn = 0;
+        checkOpponentOcaso();
+      });
       return;
     }
 
@@ -3202,7 +3295,10 @@ function toggleTurnOwner(isOnlineEndTurn = false) {
 
         addLog(`[Trigger Desertar] Tu adversario seleccionó <strong>${cardName}</strong> de tu cementerio: puedes recuperarla a tu mano.`, 'var(--accent-cyan)');
         const dummyEvent = { clientX: window.innerWidth / 2 - 120, clientY: window.innerHeight / 2 - 80 };
-        showContextMenu(dummyEvent, confirmItems);
+        showContextMenu(dummyEvent, confirmItems, () => {
+          playtestState.desertarCountThisTurn--;
+          checkDesertarOrProceed(nextCallback);
+        });
       });
       return;
     }
@@ -3259,7 +3355,10 @@ function toggleTurnOwner(isOnlineEndTurn = false) {
 
         addLog(`[Trigger Rival Desertar] Seleccionaste <strong>${cardName}</strong> del cementerio rival: el rival puede recuperarla a su mano.`, 'var(--accent-cyan)');
         const dummyEvent = { clientX: window.innerWidth / 2 - 120, clientY: window.innerHeight / 2 - 80 };
-        showContextMenu(dummyEvent, confirmItems);
+        showContextMenu(dummyEvent, confirmItems, () => {
+          playtestState.opponentDesertarCountThisTurn--;
+          checkDesertarOrProceed(nextCallback);
+        });
       });
       return;
     }
@@ -3437,7 +3536,10 @@ function toggleTurnOwner(isOnlineEndTurn = false) {
     ];
     addLog(`[Trigger] Puedes activar el efecto de fin de turno de <strong>¡Reagrupar!</strong> al haber sido enviada al cementerio este turno.`, 'var(--accent-cyan)');
     const dummyEvent = { clientX: window.innerWidth / 2 - 120, clientY: window.innerHeight / 2 - 80 };
-    showContextMenu(dummyEvent, items);
+    showContextMenu(dummyEvent, items, () => {
+      playtestState.reagruparTriggeredThisTurn = false;
+      checkMarinaSP186OrProceed(endOfTurnFinalCallback);
+    });
     return;
   }
 
@@ -3504,7 +3606,9 @@ function toggleTurnOwner(isOnlineEndTurn = false) {
         ];
 
         const dummyEvent = { clientX: window.innerWidth / 2 - 120, clientY: window.innerHeight / 2 - 80 };
-        showContextMenu(dummyEvent, items);
+        showContextMenu(dummyEvent, items, () => {
+          processNextOppRoy();
+        });
       };
 
       processNextOppRoy();
@@ -3565,7 +3669,9 @@ function toggleTurnOwner(isOnlineEndTurn = false) {
         ];
 
         const dummyEvent = { clientX: window.innerWidth / 2 - 120, clientY: window.innerHeight / 2 - 80 };
-        showContextMenu(dummyEvent, items);
+        showContextMenu(dummyEvent, items, () => {
+          checkMarinaSP186OrProceed(endOfTurnFinalCallback);
+        });
         return;
       }
 
@@ -3630,7 +3736,9 @@ function toggleTurnOwner(isOnlineEndTurn = false) {
 
         addLog(`[Trigger] Puedes activar el efecto de mano de <strong>Nobuko</strong> al final del turno rival al tener este 4 o más cartas en su mano.`, 'var(--accent-cyan)');
         const dummyEvent = { clientX: window.innerWidth / 2 - 120, clientY: window.innerHeight / 2 - 80 };
-        showContextMenu(dummyEvent, items);
+        showContextMenu(dummyEvent, items, () => {
+          checkMarinaSP186OrProceed(endOfTurnFinalCallback);
+        });
         return;
       }
 
@@ -3698,7 +3806,9 @@ function toggleTurnOwner(isOnlineEndTurn = false) {
 
         addLog(`[Trigger] Puedes activar el efecto de mano de <strong>Fredlard</strong> al final del turno rival para que ambos jugadores roben 1 carta.`, 'var(--accent-cyan)');
         const dummyEvent = { clientX: window.innerWidth / 2 - 120, clientY: window.innerHeight / 2 - 80 };
-        showContextMenu(dummyEvent, items);
+        showContextMenu(dummyEvent, items, () => {
+          checkNobukoOrProceed();
+        });
         return;
       }
 
@@ -3804,7 +3914,9 @@ function toggleTurnOwner(isOnlineEndTurn = false) {
 
         addLog(`[Trigger] Puedes activar el efecto de mano de <strong>Nara</strong> al final del turno rival para buscar a Nobuko o Fredlard y ambos robar 1 carta.`, 'var(--accent-cyan)');
         const dummyEvent = { clientX: window.innerWidth / 2 - 120, clientY: window.innerHeight / 2 - 80 };
-        showContextMenu(dummyEvent, items);
+        showContextMenu(dummyEvent, items, () => {
+          checkFredlardOrProceed();
+        });
         return;
       }
 
@@ -3953,7 +4065,9 @@ function toggleTurnOwner(isOnlineEndTurn = false) {
 
             addLog(`[Trigger] Puedes activar el efecto de mano de <strong>Katherine</strong> al final del turno rival al controlar este 1 personaje con 5 o más Skills.`, 'var(--accent-cyan)');
             const dummyEvent = { clientX: window.innerWidth / 2 - 120, clientY: window.innerHeight / 2 - 80 };
-            showContextMenu(dummyEvent, items);
+            showContextMenu(dummyEvent, items, () => {
+              checkRoySP225OrProceed();
+            });
             return;
           }
         }
@@ -4088,7 +4202,9 @@ function toggleTurnOwner(isOnlineEndTurn = false) {
 
           addLog(`[Trigger] Puedes activar el efecto de mano de <strong>¡Tropiezo!</strong> al final del turno rival al controlar este 1 personaje con 4 o más Skills.`, 'var(--accent-cyan)');
           const dummyEvent = { clientX: window.innerWidth / 2 - 120, clientY: window.innerHeight / 2 - 80 };
-          showContextMenu(dummyEvent, items);
+          showContextMenu(dummyEvent, items, () => {
+            checkNaraSP184OrProceed();
+          });
           return;
         }
       }
@@ -4178,7 +4294,9 @@ function toggleTurnOwner(isOnlineEndTurn = false) {
                   }
                 ];
                 const dummyEvent = { clientX: window.innerWidth / 2 - 120, clientY: window.innerHeight / 2 - 80 };
-                showContextMenu(dummyEvent, drawItems);
+                showContextMenu(dummyEvent, drawItems, () => {
+                  checkTropiezoOrProceed();
+                });
               };
 
               preguntarRoboNobuko222();
@@ -4194,7 +4312,9 @@ function toggleTurnOwner(isOnlineEndTurn = false) {
 
         addLog(`[Trigger] Puedes activar el efecto de mano de <strong>Nobuko (SP222)</strong> al final del turno rival para buscar "¡Tropiezo!" y robar 1 carta.`, 'var(--accent-cyan)');
         const dummyEvent = { clientX: window.innerWidth / 2 - 120, clientY: window.innerHeight / 2 - 80 };
-        showContextMenu(dummyEvent, items);
+        showContextMenu(dummyEvent, items, () => {
+          checkTropiezoOrProceed();
+        });
         return;
       }
 
@@ -4327,7 +4447,9 @@ function toggleTurnOwner(isOnlineEndTurn = false) {
                       }
                     ];
                     const dummyEvent = { clientX: window.innerWidth / 2 - 120, clientY: window.innerHeight / 2 - 80 };
-                    showContextMenu(dummyEvent, millItems);
+                    showContextMenu(dummyEvent, millItems, () => {
+                      checkRoySP227OrProceed();
+                    });
                   } else {
                     checkRoySP227OrProceed();
                   }
@@ -4345,7 +4467,9 @@ function toggleTurnOwner(isOnlineEndTurn = false) {
 
         addLog(`[Trigger] Puedes activar el efecto de mano de <strong>Roy (SP225)</strong> al final del turno rival para mirar su mano y descartarle 1 Personaje.`, 'var(--accent-cyan)');
         const dummyEvent = { clientX: window.innerWidth / 2 - 120, clientY: window.innerHeight / 2 - 80 };
-        showContextMenu(dummyEvent, items);
+        showContextMenu(dummyEvent, items, () => {
+          checkRoySP227OrProceed();
+        });
         return;
       }
 
@@ -4442,7 +4566,9 @@ function toggleTurnOwner(isOnlineEndTurn = false) {
 
         addLog(`[Trigger] Puedes activar el efecto de mano de <strong>Roy (SP253)</strong> al final del turno rival para enviarlo al cementerio junto con 1 Skill propia de Roy en tu deck.`, 'var(--accent-cyan)');
         const dummyEvent = { clientX: window.innerWidth / 2 - 120, clientY: window.innerHeight / 2 - 80 };
-        showContextMenu(dummyEvent, items);
+        showContextMenu(dummyEvent, items, () => {
+          checkNobukoSP222OrProceed();
+        });
         return;
       }
 
@@ -4534,7 +4660,9 @@ function toggleTurnOwner(isOnlineEndTurn = false) {
 
         addLog(`[Trigger] Puedes activar el efecto de campo de <strong>Roy (SP227)</strong> [Slot ${slotIdx + 1}] al final del turno rival para enviar las primeras 3 cartas del tope de tu deck al cementerio.`, 'var(--accent-cyan)');
         const dummyEvent = { clientX: window.innerWidth / 2 - 120, clientY: window.innerHeight / 2 - 80 };
-        showContextMenu(dummyEvent, items);
+        showContextMenu(dummyEvent, items, () => {
+          processNextRoySlot();
+        });
       };
 
       processNextRoySlot();
@@ -4548,6 +4676,10 @@ function toggleTurnOwner(isOnlineEndTurn = false) {
 }
 
 function proceedToNextTurn() {
+  if (window._turnTransitionWatchdog) {
+    clearTimeout(window._turnTransitionWatchdog);
+    window._turnTransitionWatchdog = null;
+  }
   const wasPlayerTurnInOnline = !!(playtestState.isOnlineMatch && playtestState.turnOwner === 'player');
   if (wasPlayerTurnInOnline) {
     playtestState.pendingRoy339SearchPlayer = 0;
@@ -4555,6 +4687,8 @@ function proceedToNextTurn() {
     playtestState.descansoCountThisTurn = 0;
     playtestState.apagonCountThisTurn = 0;
     playtestState.ocasoDelPasadoUsedThisTurn = false;
+    playtestState.ocasoDelPasadoSentToGraveThisTurn = 0;
+    playtestState.opponentOcasoDelPasadoSentToGraveThisTurn = 0;
     playtestState.desertarCountThisTurn = 0;
     if (Array.isArray(playtestState.pendingPlanificar342List)) {
       playtestState.pendingPlanificar342List = playtestState.pendingPlanificar342List.filter(item => item && item.owner === 'opponent');
@@ -4600,6 +4734,7 @@ function proceedToNextTurn() {
   playtestState.descansoCountThisTurn = 0;
   playtestState.apagonCountThisTurn = 0;
   playtestState.ocasoDelPasadoUsedThisTurn = false;
+  playtestState.ocasoDelPasadoSentToGraveThisTurn = 0;
   playtestState.desenfundarUsedThisTurn = false;
   playtestState.opponentDesenfundarUsedThisTurn = false;
   playtestState.descuidoUsedThisTurn = false;
@@ -4609,6 +4744,7 @@ function proceedToNextTurn() {
   playtestState.opponentDescansoCountThisTurn = 0;
   playtestState.opponentApagonCountThisTurn = 0;
   playtestState.opponentOcasoDelPasadoUsedThisTurn = false;
+  playtestState.opponentOcasoDelPasadoSentToGraveThisTurn = 0;
   playtestState.opponentDesertarCountThisTurn = 0;
   playtestState.opponentBorealInsidiosaUsedThisTurn = false;
   playtestState.usedVoidOh367ThisTurn = false;
@@ -39133,18 +39269,20 @@ function showGraveModal() {
           });
         }
 
-        const isBlockedGraveToHand = isGraveToHandBlocked();
-        items.push({
-          text: isBlockedGraveToHand ? `⚠️ Regresar a la mano (Bloqueado por Haruka SP251)` : `✋ Regresar a la mano (Simulación libre)`,
-          disabled: isBlockedGraveToHand,
-          action: () => {
-            playtestState.grave.splice(index, 1);
-            playtestState.hand.push(id);
-            addLog(`Regresaste ${card.nombre} del cementerio a la mano.`);
-            closeModal();
-            updatePlaytestView();
-          }
-        });
+        if (!playtestState.isDuelVsAI && !playtestState.isOnlineMatch) {
+          const isBlockedGraveToHand = isGraveToHandBlocked();
+          items.push({
+            text: isBlockedGraveToHand ? `⚠️ Regresar a la mano (Bloqueado por Haruka SP251)` : `✋ Regresar a la mano (Simulación libre)`,
+            disabled: isBlockedGraveToHand,
+            action: () => {
+              playtestState.grave.splice(index, 1);
+              playtestState.hand.push(id);
+              addLog(`Regresaste ${card.nombre} del cementerio a la mano.`);
+              closeModal();
+              updatePlaytestView();
+            }
+          });
+        }
 
         const dummyEvent = { clientX: e.clientX, clientY: e.clientY };
         showContextMenu(dummyEvent, items);
@@ -39403,7 +39541,8 @@ function showOpponentGraveModal() {
           });
         }
 
-        items.push({
+        if (!playtestState.isDuelVsAI && !playtestState.isOnlineMatch) {
+          items.push({
             text: isBlockedGraveToHand ? `⚠️ Regresar a la mano del Rival (Bloqueado por Haruka SP251)` : `✋ Regresar a la mano del Rival (Simulación libre)`,
             disabled: isBlockedGraveToHand,
             action: () => {
@@ -39415,6 +39554,7 @@ function showOpponentGraveModal() {
               updatePlaytestView();
             }
           });
+        }
 
         const dummyEvent = { clientX: e.clientX, clientY: e.clientY };
         showContextMenu(dummyEvent, items);
@@ -41378,7 +41518,10 @@ function checkAndTriggerRecursosSP404(owner = 'player', testOptions = {}, onDone
   ];
 
   const dummyEvent = { clientX: window.innerWidth / 2 - 140, clientY: window.innerHeight / 2 - 80 };
-  showContextMenu(dummyEvent, items);
+  showContextMenu(dummyEvent, items, () => {
+    addLog(`${tag} Decidiste no activar el efecto de Recursos.`, 'var(--text-muted)');
+    if (typeof onDone === 'function') onDone(false, { reason: 'user_declined' });
+  });
 }
 
 function checkRecursosSP404OrProceed(nextCallback) {
@@ -52909,7 +53052,9 @@ function checkNaraSP392OrProceed(nextCallback) {
     ];
     addLog(`[Trigger] Puedes activar el efecto de mano de <strong>Nara (SP392)</strong> al final del turno.`, 'var(--accent-cyan)');
     const dummyEvent = { clientX: window.innerWidth / 2 - 120, clientY: window.innerHeight / 2 - 80 };
-    showContextMenu(dummyEvent, items);
+    showContextMenu(dummyEvent, items, () => {
+      checkOpponentNara();
+    });
     return;
   }
 

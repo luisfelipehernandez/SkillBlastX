@@ -1,9 +1,9 @@
 {
-  "version": "1.1.8",
-  "version_code": 11,
-  "release_date": "2026-10-16",
+  "version": "1.1.9",
+  "version_code": 12,
+  "release_date": "2026-10-17",
   "name": "Skill Blast X",
-  "description": "Corrección de activación de Florete (SP371) desde el cementerio y flujo visual de Lyna (SP425) para portar Skills del deck.",
+  "description": "Implementación de Ocaso del pasado (BBX-SP265), robustecimiento de menús de fin de turno del rival y sincronización asíncrona de ataques de la IA.",
   "repo_url": "https://github.com/luisfelipehernandez/SkillBlastX",
   "raw_base_url": "https://raw.githubusercontent.com/luisfelipehernandez/SkillBlastX/main/"
 }

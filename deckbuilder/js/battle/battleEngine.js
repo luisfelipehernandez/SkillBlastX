@@ -98,6 +98,20 @@
     },
 
     /**
+     * Versión asíncrona de executeAttack que devuelve una Promise
+     */
+    async executeAttackAsync(attackerSlotIndex, targetSlotIndex, owner = 'player', opts = {}) {
+      return new Promise((resolve) => {
+        const started = this.executeAttack(attackerSlotIndex, targetSlotIndex, owner, opts, (success, matchEnd) => {
+          resolve({ success, matchEnd });
+        });
+        if (!started) {
+          resolve({ success: false });
+        }
+      });
+    },
+
+    /**
      * Ejecuta una declaración de ataque entre una ranura atacante y una defensora
      */
     executeAttack(attackerSlotIndex, targetSlotIndex, owner = 'player', opts = {}, cb = null) {
