@@ -725,9 +725,11 @@ body {
   -webkit-user-drag: none !important;
 }
 
-/* Carta rotada para Ataque */
+/* Carta rotada para Ataque (Agotada este turno) */
 .in-game-card.rotated {
-  transform: rotate(90deg);
+  transform: rotate(90deg) !important;
+  filter: brightness(0.88);
+  box-shadow: 0 0 10px rgba(255, 74, 90, 0.4) !important;
 }
 
 /* Zonas de Equipamiento de Skills en Campo */

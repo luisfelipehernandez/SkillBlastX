@@ -2482,7 +2482,7 @@ function toggleTurnOwner(isOnlineEndTurn = false) {
   }
   window._turnTransitionWatchdog = setTimeout(() => {
     if (playtestState.turnTransitionInProgress) {
-      const hasModal = typeof document !== 'undefined' && !!document.querySelector('.modal-overlay');
+      const hasModal = typeof document !== 'undefined' && !!document.querySelector('.modal-overlay:not(.hidden)');
       const menuEl = typeof document !== 'undefined' && document.getElementById('card-context-menu');
       const hasMenu = menuEl && !menuEl.classList.contains('hidden');
       if (!hasModal && !hasMenu) {
@@ -6533,6 +6533,17 @@ function updatePlaytestView() {
     });
   }
 
+  // Función utilitaria oficial para verificar si una Skill portada (por ranura/índice) ya fue usada este turno
+  if (typeof window !== 'undefined') {
+    window.isEquippedSkillUsed = function(slot, skillId, skIndex, owner = 'player') {
+      if (!slot) return false;
+      if (typeof skIndex === 'number' && skIndex >= 0) {
+        return (slot.usedSkillIndexes || []).includes(skIndex);
+      }
+      return (slot.usedSkills || []).includes(skillId);
+    };
+  }
+
   // Slots de Personajes en Campo (Jugador)
   for (let i = 0; i < 3; i++) {
     const slotEl = document.getElementById(`char-slot-${i}`);
@@ -7355,8 +7366,18 @@ function showContextMenu(e, items, onDismiss = null) {
       btn.className = 'context-menu-item';
       btn.textContent = item.text;
       if (item.disabled) {
-        btn.style.opacity = '0.4';
-        btn.style.pointerEvents = 'none';
+        btn.style.opacity = '0.45';
+        btn.style.cursor = 'not-allowed';
+        btn.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          hideContextMenu();
+          if (item.action && typeof item.action === 'function') {
+            item.action();
+          } else if (typeof addLog === 'function') {
+            const cleanText = (item.text || '').replace(/^[^\w\s]+/, '').trim();
+            addLog(`ℹ️ Acción no disponible: ${cleanText}`, 'var(--text-muted)');
+          }
+        });
       } else {
         btn.addEventListener('click', (ev) => {
           ev.stopPropagation();
@@ -16909,7 +16930,10 @@ if (typeof global !== 'undefined') global.SKILLS_WITHOUT_FIELD_ACTIVATION = SKIL
 
       // Si es Mapa (BBX-SP264)
       if (skillId === 'BBX-SP264') {
-        if (yaUsado || playtestState.deck.length < 5 || isSkillEffectBlocked(skillId, 'player', slot)) {
+        const isThisIndexUsed = (typeof window.isEquippedSkillUsed === 'function')
+          ? window.isEquippedSkillUsed(slot, skillId, skIndex, 'player')
+          : (slot.usedSkillIndexes || []).includes(skIndex);
+        if (isThisIndexUsed || playtestState.deck.length < 5 || isSkillEffectBlocked(skillId, 'player', slot)) {
           return;
         }
       }
@@ -17210,6 +17234,8 @@ if (typeof global !== 'undefined') global.SKILLS_WITHOUT_FIELD_ACTIVATION = SKIL
     attackLabel = `⚔ Atacar bloqueado (Emblema Fafnirland: solo 1 Personaje)`;
   } else if (isAttackBlockedByPradera) {
     attackLabel = `⚔ Atacar bloqueado (Pradera: jugado de la mano este turno)`;
+  } else if ((slot.attacksDeclared || 0) >= (slot.maxAttacks || 1)) {
+    attackLabel = `⚔ Atacar (Agotado: ya atacó este turno)`;
   }
 
   if (card.id !== 'BBX-SP296' && card.id !== 'BBX-SP319') {
@@ -17245,6 +17271,10 @@ if (typeof global !== 'undefined') global.SKILLS_WITHOUT_FIELD_ACTIVATION = SKIL
           alert("Este Personaje no puede declarar ataques el turno que es jugado desde la mano debido al efecto de Pradera.");
           return;
         }
+        if ((slot.attacksDeclared || 0) >= (slot.maxAttacks || 1)) {
+          alert(`Este Personaje (${card.nombre}) ya agotó sus ataques en este turno (Límite: ${slot.maxAttacks || 1} ataque por turno).`);
+          return;
+        }
         if (eligibleOpponents.length === 0) return;
 
         const oppCharacterIds = eligibleOpponents.map(item => item.characterId);
@@ -17259,6 +17289,7 @@ if (typeof global !== 'undefined') global.SKILLS_WITHOUT_FIELD_ACTIVATION = SKIL
           }
 
           addLog(`⚔ <strong>${card.nombre}</strong> declara un ataque contra <strong>${defenderCard.nombre}</strong> (Ataque ${slot.attacksDeclared}/${slot.maxAttacks || 1} de este turno).`, 'var(--accent-danger)');
+          updatePlaytestView();
 
           if (playtestState.isOnlineMatch && typeof MultiplayerEngine !== 'undefined' && MultiplayerEngine.isConnected()) {
             const sendAttackPacket = () => {
@@ -18330,9 +18361,10 @@ function showEquippedSkillMenu(e, slotIndex, skId, skIndex) {
 
     // Si es Mapa (BBX-SP264)
     if (skId === 'BBX-SP264') {
-      const yaUsadoIndex = (slot.usedSkillIndexes || []).includes(skIndex);
-      const yaUsadoCard = (slot.usedSkills || []).includes(skId);
-      if (yaUsadoIndex || yaUsadoCard || playtestState.deck.length < 5 || isSkillEffectBlocked(skId, 'player', slot)) {
+      const isThisIndexUsed = (typeof window.isEquippedSkillUsed === 'function')
+        ? window.isEquippedSkillUsed(slot, skId, skIndex, 'player')
+        : (slot.usedSkillIndexes || []).includes(skIndex);
+      if (isThisIndexUsed || playtestState.deck.length < 5 || isSkillEffectBlocked(skId, 'player', slot)) {
         canActivate = false;
       }
     }
@@ -22105,6 +22137,17 @@ function resolveOpponentStandardDestructionBase(slotIndex) {
     // Trigger: Encuentro imprevisto (BBX-SP338) en el cementerio rival tras derrota de personaje en batalla
     checkAndTriggerEncuentroImprevistoOpponent();
 
+    // Regla Oficial Skill Blast X: Al ser destruido en batalla y enviado a la banca, el controlador roba 1 carta
+    if (!playtestState.matchEnded && playtestState.opponentDeck.length > 0) {
+      if (typeof opponentDrawCard === 'function') {
+        opponentDrawCard(null);
+      } else {
+        playtestState.opponentHand.push(playtestState.opponentDeck.shift());
+        updatePlaytestView();
+      }
+      addLog(`[Regla de Combate] El Oponente robó 1 carta por la derrota de su Personaje en batalla.`, 'var(--accent-purple)');
+    }
+
     // Condición de Victoria / Derrota por 3 personajes en banca
     if (typeof checkMatchEndCondition === 'function') {
       checkMatchEndCondition();
@@ -22298,9 +22341,17 @@ function resolveOpponentStandardDestructionBase(slotIndex) {
     // cantSkills > 1: El oponente tiene 2 o más Skills
     // 1. En Duelo contra la IA: La IA siempre debe perder 1 Skill tras recibir el combate
     if (playtestState.isDuelVsAI) {
-      // Elegir qué Skill perder (conservar habilidades continuas protectoras como Relajo o Inmovilizar si hay otra)
-      const continuousSkills = ['BBX-SP224', 'BBX-SP005', 'BBX-SP002', 'BBX-SP209'];
-      let chosenIdx = slot.skills.findIndex(sk => !continuousSkills.includes(sk));
+      // Prioridad 1: Perder 'Resistir' (BBX-SP060) si fue equipada como escudo reactivo de mano
+      let chosenIdx = slot.skills.indexOf('BBX-SP060');
+      if (chosenIdx === -1) {
+        // Prioridad 2: Perder skills ya utilizadas este turno
+        chosenIdx = slot.skills.findIndex((sk, sIdx) => (slot.usedSkillIndexes || []).includes(sIdx));
+      }
+      if (chosenIdx === -1) {
+        // Prioridad 3: Conservar habilidades continuas y cartas clave (como Carga destello BBX-SP033, Inmovilizar BBX-SP045, etc.)
+        const protectedSkills = ['BBX-SP224', 'BBX-SP005', 'BBX-SP002', 'BBX-SP209', 'BBX-SP033', 'BBX-SP045'];
+        chosenIdx = slot.skills.findIndex(sk => !protectedSkills.includes(sk));
+      }
       if (chosenIdx === -1) chosenIdx = 0;
 
       const lostSkillId = slot.skills.splice(chosenIdx, 1)[0];
@@ -23122,6 +23173,17 @@ function sendCharacterToBench(slotIndex) {
   slot.isRotated = false;
   slot.effectUsed = false;
   updatePlaytestView();
+
+  // Regla Oficial Skill Blast X: Al ser destruido en batalla y enviado a la banca, el controlador roba 1 carta
+  if (!playtestState.matchEnded && playtestState.deck.length > 0) {
+    if (typeof drawCard === 'function') {
+      drawCard(null);
+    } else {
+      playtestState.hand.push(playtestState.deck.shift());
+      updatePlaytestView();
+    }
+    addLog(`[Regla de Combate] Robaste 1 carta por la derrota de tu Personaje en batalla.`, 'var(--accent-purple)');
+  }
 
   // Condición de Victoria / Derrota por 3 personajes en banca
   if (typeof checkMatchEndCondition === 'function') {
@@ -25504,10 +25566,11 @@ function activateSkillFieldEffect(slotIndex, skillId, skIndex) {
 
   // Mapa BBX-SP264
   if (skillId === 'BBX-SP264') {
-    const yaUsadoCard = (slot.usedSkills || []).includes(skillId);
-    const yaUsadoIndex = (slot.usedSkillIndexes || []).includes(skIndex);
-    if (yaUsadoCard || yaUsadoIndex) {
-      alert("Ya has usado el efecto de este 'Mapa' en este turno.");
+    const isThisIndexUsed = (typeof skIndex === 'number' && skIndex >= 0)
+      ? (slot.usedSkillIndexes || []).includes(skIndex)
+      : (slot.usedSkills || []).includes(skillId);
+    if (isThisIndexUsed) {
+      alert("Ya has usado el efecto de esta copia de 'Mapa' en este turno.");
       return;
     }
     if (playtestState.deck.length < 5) {
@@ -25517,8 +25580,11 @@ function activateSkillFieldEffect(slotIndex, skillId, skIndex) {
 
     slot.usedSkills = slot.usedSkills || [];
     slot.usedSkillIndexes = slot.usedSkillIndexes || [];
-    slot.usedSkills.push(skillId);
-    if (skIndex !== undefined) slot.usedSkillIndexes.push(skIndex);
+    if (typeof skIndex === 'number' && skIndex >= 0) {
+      if (!slot.usedSkillIndexes.includes(skIndex)) slot.usedSkillIndexes.push(skIndex);
+    } else {
+      slot.usedSkills.push(skillId);
+    }
 
     const revealedIds = playtestState.deck.slice(0, 5);
     addLog(`[Efecto Mapa] Revelando las primeras 5 cartas del tope de tu deck...`, 'var(--accent-cyan)');
@@ -42920,7 +42986,38 @@ function executeMarinaSP349(activatorOwner = 'player', handIndex = -1, onDone = 
     return;
   }
 
-  // 1. Enviar esta carta de la mano al cementerio como costo
+  // 1. Verificar si se puede portar desde el deck por floodgates
+  if (typeof canEquipFromZone === 'function' && !canEquipFromZone('deck')) {
+    addLog(`[Efecto Marina BBX-SP349 ${isPlayer ? '' : 'Rival'}] Bloqueado por efecto continuo: no se pueden portar Skills desde el deck.`, 'var(--text-muted)');
+    if (onDone) onDone();
+    return;
+  }
+
+  // 2. Buscar "¡Splash!" (BBX-SP028) en el deck
+  if (!deck.includes('BBX-SP028')) {
+    addLog(`[Efecto Marina BBX-SP349 ${isPlayer ? '' : 'Rival'}] No hay copias de "¡Splash!" en el deck.`, 'var(--text-muted)');
+    if (onDone) onDone();
+    return;
+  }
+
+  // 3. Buscar Personajes Marina elegibles en el campo
+  const eligibleMarinaSlots = [];
+  slots.forEach((s, idx) => {
+    if (s && s.character && cardsDatabase[s.character]?.nombre?.includes("Marina")) {
+      const canEquipEishet = typeof canEquipSkillToSlotDueToEishetSP320 === 'function' ? canEquipSkillToSlotDueToEishetSP320('BBX-SP028', s) : true;
+      if (canEquipEishet) {
+        eligibleMarinaSlots.push({ slot: s, index: idx, name: cardsDatabase[s.character].nombre });
+      }
+    }
+  });
+
+  if (eligibleMarinaSlots.length === 0) {
+    addLog(`[Efecto Marina BBX-SP349 ${isPlayer ? '' : 'Rival'}] No hay Personajes Marina elegibles en el campo para portar "¡Splash!".`, 'var(--text-muted)');
+    if (onDone) onDone();
+    return;
+  }
+
+  // 4. Enviar esta carta de la mano al cementerio como costo
   const discardedId = hand.splice(mIdx, 1)[0];
   grave.push(discardedId);
   addLog(`[Efecto Marina BBX-SP349 ${isPlayer ? '' : 'Rival'}] ${isPlayer ? 'Enviaste' : 'El rival envió'} a <strong>Marina</strong> de su mano al cementerio como costo.`, 'var(--accent-purple)');
@@ -42947,40 +43044,6 @@ function executeMarinaSP349(activatorOwner = 'player', handIndex = -1, onDone = 
 
   updatePlaytestView();
 
-  // 2. Verificar si se puede portar desde el deck por floodgates
-  if (typeof canEquipFromZone === 'function' && !canEquipFromZone('deck')) {
-    addLog(`[Efecto Marina BBX-SP349 ${isPlayer ? '' : 'Rival'}] Bloqueado por efecto continuo: no se pueden portar Skills desde el deck.`, 'var(--text-muted)');
-    updatePlaytestView();
-    if (onDone) onDone();
-    return;
-  }
-
-  // 3. Buscar "¡Splash!" (BBX-SP028) en el deck
-  if (!deck.includes('BBX-SP028')) {
-    addLog(`[Efecto Marina BBX-SP349 ${isPlayer ? '' : 'Rival'}] No hay copias de "¡Splash!" en el deck.`, 'var(--text-muted)');
-    updatePlaytestView();
-    if (onDone) onDone();
-    return;
-  }
-
-  // 4. Buscar Personajes Marina elegibles en el campo
-  const eligibleMarinaSlots = [];
-  slots.forEach((s, idx) => {
-    if (s.character && cardsDatabase[s.character]?.nombre?.includes("Marina")) {
-      const canEquipEishet = typeof canEquipSkillToSlotDueToEishetSP320 === 'function' ? canEquipSkillToSlotDueToEishetSP320('BBX-SP028', s) : true;
-      if (canEquipEishet) {
-        eligibleMarinaSlots.push({ slot: s, index: idx, name: cardsDatabase[s.character].nombre });
-      }
-    }
-  });
-
-  if (eligibleMarinaSlots.length === 0) {
-    addLog(`[Efecto Marina BBX-SP349 ${isPlayer ? '' : 'Rival'}] No hay Personajes Marina elegibles en el campo para portar "¡Splash!".`, 'var(--text-muted)');
-    updatePlaytestView();
-    if (onDone) onDone();
-    return;
-  }
-
   const applyToMarina = (targetMarina) => {
     const splashIdx = deck.indexOf('BBX-SP028');
     if (splashIdx === -1) {
@@ -43004,7 +43067,7 @@ function executeMarinaSP349(activatorOwner = 'player', handIndex = -1, onDone = 
     if (onDone) onDone();
   };
 
-  if (eligibleMarinaSlots.length === 1) {
+  if (eligibleMarinaSlots.length === 1 || !isPlayer) {
     applyToMarina(eligibleMarinaSlots[0]);
   } else {
     const marinaOptions = eligibleMarinaSlots.map(mItem => ({
@@ -43012,7 +43075,9 @@ function executeMarinaSP349(activatorOwner = 'player', handIndex = -1, onDone = 
       action: () => applyToMarina(mItem)
     }));
     const dummyEvent = { clientX: window.innerWidth / 2 - 120, clientY: window.innerHeight / 2 - 80 };
-    showContextMenu(dummyEvent, marinaOptions);
+    showContextMenu(dummyEvent, marinaOptions, () => {
+      if (onDone) onDone();
+    });
   }
 }
 

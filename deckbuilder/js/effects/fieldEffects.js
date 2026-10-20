@@ -256,6 +256,172 @@
         return true;
       },
 
+      // Haruka (BBX-SP093): Descartar 1 carta de mano para portar 1 Skill propia de Haruka desde el deck
+      'BBX-SP093': (slotIndex, owner = 'player', opts = {}, cb = null) => {
+        const { state, mySlots, myHand, myDeck, myGrave, tag } = getState(owner);
+        const slot = mySlots[slotIndex];
+        if (!slot || slot.effectUsed || myHand.length === 0) {
+          if (cb) cb(false);
+          return false;
+        }
+        const isHarukaSkill = id => {
+          const c = getCard(id);
+          return c && c.tipo === 'Skill' && c.portador && c.portador.includes('Haruka');
+        };
+        const harukaSkills = myDeck.filter(isHarukaSkill);
+        if (harukaSkills.length === 0) {
+          if (cb) cb(false);
+          return false;
+        }
+
+        const performEquip = (chosenSkillId) => {
+          const sIdx = myDeck.indexOf(chosenSkillId);
+          if (sIdx !== -1) myDeck.splice(sIdx, 1);
+          slot.skills.push(chosenSkillId);
+          shuffle(myDeck);
+          slot.effectUsed = true;
+          logMsg(`${tag} Haruka (SP093) portó <strong>${getCard(chosenSkillId)?.nombre || chosenSkillId}</strong> directamente desde su deck.`, 'var(--accent-purple)');
+          updateView();
+          if (cb) cb(true);
+          return true;
+        };
+
+        const performDiscardAndContinue = (discardId) => {
+          const dIdx = myHand.indexOf(discardId);
+          if (dIdx !== -1) myHand.splice(dIdx, 1);
+          myGrave.push(discardId);
+          logMsg(`${tag} Haruka (SP093) descartó <strong>${getCard(discardId)?.nombre || discardId}</strong> como costo.`, 'var(--accent-purple)');
+
+          if (typeof root.checkAndTriggerAlBorde === 'function') root.checkAndTriggerAlBorde(discardId);
+          if (typeof root.checkAndTriggerReflejo === 'function') root.checkAndTriggerReflejo(discardId);
+          if (typeof root.checkAndTriggerFulgorOfensivo === 'function') root.checkAndTriggerFulgorOfensivo(discardId);
+
+          const currentSkills = myDeck.filter(isHarukaSkill);
+          if (currentSkills.length === 0) {
+            slot.effectUsed = true;
+            updateView();
+            if (cb) cb(true);
+            return true;
+          }
+
+          if (opts && opts.targetId && currentSkills.includes(opts.targetId)) {
+            return performEquip(opts.targetId);
+          }
+
+          const isAI = state && state.isDuelVsAI && owner === 'opponent';
+          const openChooser = (typeof root.openCardChooserModal === 'function') ? root.openCardChooserModal : (typeof openCardChooserModal === 'function' ? openCardChooserModal : null);
+          if (!isAI && openChooser && typeof document !== 'undefined' && document.body) {
+            const chooserTargets = currentSkills.map(id => ({ id, owner }));
+            openChooser(chooserTargets, "Haruka (SP093): Selecciona la Skill propia de tu deck para equipar", (chosenIdx) => {
+              performEquip(currentSkills[chosenIdx]);
+            }, () => {
+              performEquip(currentSkills[0]);
+            });
+            return true;
+          }
+
+          return performEquip(currentSkills[0]);
+        };
+
+        if (opts && opts.discardId && myHand.includes(opts.discardId)) {
+          return performDiscardAndContinue(opts.discardId);
+        }
+        if (opts && typeof opts.discardIndex === 'number' && myHand[opts.discardIndex]) {
+          return performDiscardAndContinue(myHand[opts.discardIndex]);
+        }
+
+        const isAI = state && state.isDuelVsAI && owner === 'opponent';
+        const openChooser = (typeof root.openCardChooserModal === 'function') ? root.openCardChooserModal : (typeof openCardChooserModal === 'function' ? openCardChooserModal : null);
+        if (!isAI && openChooser && typeof document !== 'undefined' && document.body) {
+          const chooserTargets = myHand.map(id => ({ id, owner }));
+          openChooser(chooserTargets, "Haruka (SP093): Selecciona la carta a descartar como costo", (chosenIdx) => {
+            performDiscardAndContinue(myHand[chosenIdx]);
+          }, () => {
+            if (cb) cb(false);
+          });
+          return true;
+        }
+
+        return performDiscardAndContinue(myHand[0]);
+      },
+
+      // Haruka (BBX-SP361): Requisito 2+ Skills, enviar 1 Skill portada al cementerio para revelar 3 del tope y añadir 1 Skill a mano
+      'BBX-SP361': (slotIndex, owner = 'player', opts = {}, cb = null) => {
+        const { state, mySlots, myDeck, myHand, myGrave, tag } = getState(owner);
+        const slot = mySlots[slotIndex];
+        if (!slot || slot.effectUsed || !slot.skills || slot.skills.length < 2 || myDeck.length === 0) {
+          if (cb) cb(false);
+          return false;
+        }
+
+        const performRevealAndAdd = (removedSkillId) => {
+          logMsg(`${tag} Haruka (SP361) envió <strong>${getCard(removedSkillId)?.nombre || removedSkillId}</strong> al cementerio.`, 'var(--accent-purple)');
+          slot.effectUsed = true;
+
+          const revealCount = Math.min(3, myDeck.length);
+          const revealed = myDeck.splice(0, revealCount);
+          const revealedSkills = revealed.filter(id => {
+            const c = getCard(id);
+            return c && c.tipo === 'Skill';
+          });
+
+          if (revealedSkills.length === 0) {
+            revealed.forEach(id => myDeck.push(id));
+            shuffle(myDeck);
+            logMsg(`${tag} Haruka (SP361) reveló ${revealCount} cartas (ninguna era Skill) y barajó el deck.`, 'var(--text-muted)');
+            updateView();
+            if (cb) cb(true);
+            return true;
+          }
+
+          const finishChoice = (chosenId) => {
+            const rIdx = revealed.indexOf(chosenId);
+            if (rIdx !== -1) revealed.splice(rIdx, 1);
+            myHand.push(chosenId);
+            revealed.forEach(id => myDeck.push(id));
+            shuffle(myDeck);
+            logMsg(`${tag} Haruka (SP361) reveló ${revealCount} cartas y agregó <strong>${getCard(chosenId)?.nombre || chosenId}</strong> a su mano. Barajó el resto.`, 'var(--accent-cyan)');
+            if (typeof root.checkAndTriggerInestabilidad === 'function') {
+              root.checkAndTriggerInestabilidad(owner);
+            }
+            updateView();
+            if (cb) cb(true);
+            return true;
+          };
+
+          if (opts && opts.chosenSkillId && revealedSkills.includes(opts.chosenSkillId)) {
+            return finishChoice(opts.chosenSkillId);
+          }
+
+          const isAI = state && state.isDuelVsAI && owner === 'opponent';
+          const openChooser = (typeof root.openCardChooserModal === 'function') ? root.openCardChooserModal : (typeof openCardChooserModal === 'function' ? openCardChooserModal : null);
+          if (!isAI && openChooser && typeof document !== 'undefined' && document.body) {
+            const chooserTargets = revealedSkills.map(id => ({ id, owner }));
+            openChooser(chooserTargets, "Haruka (SP361): Selecciona 1 Skill revelada para agregar a tu mano", (chosenIdx) => {
+              finishChoice(revealedSkills[chosenIdx]);
+            }, () => {
+              finishChoice(revealedSkills[0]);
+            });
+            return true;
+          }
+
+          return finishChoice(revealedSkills[0]);
+        };
+
+        let skillToRemove = slot.skills[0];
+        if (opts && opts.skillId && slot.skills.includes(opts.skillId)) {
+          skillToRemove = opts.skillId;
+        } else if (opts && typeof opts.skillIndex === 'number' && slot.skills[opts.skillIndex]) {
+          skillToRemove = slot.skills[opts.skillIndex];
+        }
+
+        const skIdx = slot.skills.indexOf(skillToRemove);
+        if (skIdx !== -1) slot.skills.splice(skIdx, 1);
+        myGrave.push(skillToRemove);
+
+        return performRevealAndAdd(skillToRemove);
+      },
+
       // Haruka (BBX-SP244) Modo Arcano: Requisito 3+ Skills, buscar Skill Haruka en deck
       'BBX-SP244': (slotIndex, owner = 'player', opts = {}, cb = null) => {
         const { state, mySlots, myDeck, myHand, tag } = getState(owner);
@@ -424,6 +590,91 @@
           revealed.forEach(id => myDeck.push(id));
           shuffle(myDeck);
           logMsg(`${tag} Nobuko (SP259) reveló 3 cartas sin coincidencias y barajó el deck.`, 'var(--text-muted)');
+        }
+        slot.effectUsed = true;
+        updateView();
+        if (cb) cb(true);
+        return true;
+      },
+
+      // Marina (BBX-SP168): Enviar Skills portadas al cementerio hasta la cantidad de Personajes Marina en tu cementerio
+      'BBX-SP168': (slotIndex, owner = 'player', opts = {}, cb = null) => {
+        const { mySlots, oppSlots, myGrave, oppGrave, tag } = getState(owner);
+        const slot = mySlots[slotIndex];
+        if (!slot || slot.effectUsed) {
+          if (cb) cb(false);
+          return false;
+        }
+        const marinaGraveCount = myGrave.filter(id => {
+          const c = getCard(id);
+          return c && c.tipo === 'Personaje' && c.nombre.includes("Marina");
+        }).length;
+        if (marinaGraveCount === 0) {
+          if (cb) cb(false);
+          return false;
+        }
+        const oppSkills = [];
+        oppSlots.forEach((s, sIdx) => {
+          if (s && s.skills && s.skills.length > 0) {
+            s.skills.forEach((skId, skIdx) => {
+              oppSkills.push({ sIdx, skIdx, skId });
+            });
+          }
+        });
+        if (oppSkills.length === 0) {
+          if (cb) cb(false);
+          return false;
+        }
+        const removeCount = Math.min(marinaGraveCount, oppSkills.length);
+        const removedNames = [];
+        for (let i = 0; i < removeCount; i++) {
+          const target = oppSkills[i];
+          const oppSlot = oppSlots[target.sIdx];
+          if (oppSlot && oppSlot.skills) {
+            const rIdx = oppSlot.skills.indexOf(target.skId);
+            if (rIdx !== -1) {
+              const removed = oppSlot.skills.splice(rIdx, 1)[0];
+              oppGrave.push(removed);
+              removedNames.push(getCard(removed)?.nombre || removed);
+            }
+          }
+        }
+        slot.effectUsed = true;
+        logMsg(`${tag} Marina (SP168) envió al cementerio ${removedNames.length} Skill(s) portadas del rival: <strong>${removedNames.join(', ')}</strong>.`, 'var(--accent-purple)');
+        updateView();
+        if (cb) cb(true);
+        return true;
+      },
+
+      // Marina (BBX-SP267): Requisito 1+ Skills. Revelar 4 cartas del tope del deck, si hay Personaje Marina o Skill propia de Marina, agregar 1 a la mano.
+      'BBX-SP267': (slotIndex, owner = 'player', opts = {}, cb = null) => {
+        const { mySlots, myDeck, myHand, tag } = getState(owner);
+        const slot = mySlots[slotIndex];
+        if (!slot || !slot.skills || slot.skills.length < 1 || myDeck.length === 0) {
+          if (cb) cb(false);
+          return false;
+        }
+        const count = Math.min(4, myDeck.length);
+        const revealed = myDeck.slice(0, count);
+        const isEligible = id => {
+          const c = getCard(id);
+          if (!c) return false;
+          const isMarinaChar = c.tipo === 'Personaje' && c.nombre.includes("Marina");
+          const isMarinaSkill = c.tipo === 'Skill' && c.portador && c.portador.includes("Marina");
+          return isMarinaChar || isMarinaSkill;
+        };
+        const eligible = revealed.filter(isEligible);
+        if (eligible.length === 0) {
+          shuffle(myDeck);
+          logMsg(`${tag} Marina (SP267) reveló ${count} carta(s) del tope del deck (ninguna era Personaje Marina ni Skill propia de Marina) y barajó el mazo.`, 'var(--text-muted)');
+        } else {
+          const chosen = eligible[0];
+          const dIdx = myDeck.indexOf(chosen);
+          if (dIdx !== -1) myDeck.splice(dIdx, 1);
+          myHand.push(chosen);
+          shuffle(myDeck);
+          logMsg(`${tag} Marina (SP267) reveló ${count} cartas y añadió <strong>${getCard(chosen)?.nombre || chosen}</strong> a la mano. Barajó el mazo.`, 'var(--accent-purple)');
+          if (typeof checkAndTriggerInestabilidad === 'function') checkAndTriggerInestabilidad(owner);
         }
         slot.effectUsed = true;
         updateView();
@@ -650,6 +901,194 @@
         updateView();
         if (cb) cb(true);
         return true;
+      },
+
+      // Momento oportuno (BBX-SP188): Enviar 1 Skill propia de Haruka desde el deck al cementerio
+      'BBX-SP188': (slotIndex, skIndex, owner = 'player', opts = {}, cb = null) => {
+        const { state, mySlots, myDeck, myGrave, myHand, tag } = getState(owner);
+        const slot = mySlots[slotIndex];
+        const isUsed = (typeof skIndex === 'number' && skIndex >= 0)
+          ? (slot.usedSkillIndexes || []).includes(skIndex)
+          : (slot.usedSkills || []).includes('BBX-SP188');
+        if (!slot || isUsed || myDeck.length === 0) {
+          if (cb) cb(false);
+          return false;
+        }
+
+        const isHarukaSkill = id => {
+          const c = getCard(id);
+          return c && c.tipo === 'Skill' && c.portador && c.portador.includes('Haruka');
+        };
+        const harukaSkills = myDeck.filter(isHarukaSkill);
+        if (harukaSkills.length === 0) {
+          if (cb) cb(false);
+          return false;
+        }
+
+        const applyMill = (milledId) => {
+          const mIdx = myDeck.indexOf(milledId);
+          if (mIdx !== -1) myDeck.splice(mIdx, 1);
+          myGrave.push(milledId);
+          shuffle(myDeck);
+          slot.usedSkills = slot.usedSkills || [];
+          slot.usedSkillIndexes = slot.usedSkillIndexes || [];
+          if (typeof skIndex === 'number' && skIndex >= 0) {
+            if (!slot.usedSkillIndexes.includes(skIndex)) slot.usedSkillIndexes.push(skIndex);
+          } else {
+            slot.usedSkills.push('BBX-SP188');
+          }
+          logMsg(`${tag} Activó Momento oportuno (SP188): Envió <strong>${getCard(milledId)?.nombre || milledId}</strong> al cementerio desde el deck.`, 'var(--accent-purple)');
+
+          // Trigger si es Fulgor ofensivo (SP162)
+          if (milledId === 'BBX-SP162') {
+            const fIdx = myGrave.indexOf('BBX-SP162');
+            if (fIdx !== -1) {
+              myGrave.splice(fIdx, 1);
+              slot.skills.push('BBX-SP162');
+              logMsg(`${tag} [Efecto Fulgor ofensivo] Se portó automáticamente desde el cementerio a Haruka.`, 'var(--accent-cyan)');
+            }
+          }
+
+          // Trigger si es Energía arcana (SP268)
+          if (milledId === 'BBX-SP268') {
+            const avIdx = myDeck.indexOf('BBX-SP244');
+            if (avIdx !== -1) {
+              const avCard = myDeck.splice(avIdx, 1)[0];
+              myHand.push(avCard);
+              shuffle(myDeck);
+              logMsg(`${tag} [Efecto Energía arcana] Añadió a <strong>${getCard(avCard)?.nombre || 'Haruka Modo Arcano'}</strong> a la mano desde el deck.`, 'var(--accent-cyan)');
+            }
+          }
+
+          if (typeof root.dispatchGraveTriggers === 'function') {
+            root.dispatchGraveTriggers(milledId, 'deck', owner);
+          }
+
+          updateView();
+          if (cb) cb(true);
+          return true;
+        };
+
+        if (opts && opts.targetId && harukaSkills.includes(opts.targetId)) {
+          return applyMill(opts.targetId);
+        }
+
+        const isAI = state && state.isDuelVsAI && owner === 'opponent';
+        const openChooser = (typeof root.openCardChooserModal === 'function') ? root.openCardChooserModal : (typeof openCardChooserModal === 'function' ? openCardChooserModal : null);
+        if (!isAI && openChooser && typeof document !== 'undefined' && document.body) {
+          const chooserTargets = harukaSkills.map(id => ({ id, owner }));
+          openChooser(chooserTargets, "Momento oportuno (SP188): Selecciona 1 Skill de Haruka de tu deck para enviar al cementerio", (chosenIdx) => {
+            applyMill(harukaSkills[chosenIdx]);
+          }, () => {
+            if (cb) cb(false);
+          });
+          return true;
+        }
+
+        return applyMill(harukaSkills[0]);
+      },
+
+      // Mapa (BBX-SP264): Revelar las primeras 5 cartas del tope del deck, robar 1 Personaje/Skill y descartar 1 carta de la mano
+      'BBX-SP264': (slotIndex, skIndex, owner = 'player', opts = {}, cb = null) => {
+        const { state, mySlots, myDeck, myHand, myGrave, tag } = getState(owner);
+        const slot = mySlots[slotIndex];
+        if (!slot || myDeck.length < 5) {
+          if (cb) cb(false);
+          return false;
+        }
+
+        const isThisIndexUsed = (typeof skIndex === 'number' && skIndex >= 0)
+          ? (slot.usedSkillIndexes || []).includes(skIndex)
+          : (slot.usedSkills || []).includes('BBX-SP264');
+        if (isThisIndexUsed) {
+          if (cb) cb(false);
+          return false;
+        }
+
+        slot.usedSkills = slot.usedSkills || [];
+        slot.usedSkillIndexes = slot.usedSkillIndexes || [];
+        if (typeof skIndex === 'number' && skIndex >= 0) {
+          if (!slot.usedSkillIndexes.includes(skIndex)) slot.usedSkillIndexes.push(skIndex);
+        } else {
+          slot.usedSkills.push('BBX-SP264');
+        }
+
+        const revealed = myDeck.slice(0, 5);
+        logMsg(`${tag} Activó Mapa (SP264): Reveló las primeras 5 cartas del deck.`, 'var(--accent-cyan)');
+
+        const eligible = revealed.filter(id => {
+          const c = getCard(id);
+          return c && (c.tipo === 'Personaje' || c.tipo === 'Skill');
+        });
+
+        const finishMapa = (selectedId) => {
+          const rIdx = myDeck.indexOf(selectedId);
+          if (rIdx !== -1) myDeck.splice(rIdx, 1);
+          myHand.push(selectedId);
+          shuffle(myDeck);
+          logMsg(`${tag} Agregó <strong>${getCard(selectedId)?.nombre || selectedId}</strong> a la mano por Mapa.`, 'var(--accent-cyan)');
+
+          // Descarte de 1 carta de la mano
+          const doDiscard = (discardId) => {
+            const hIdx = myHand.indexOf(discardId);
+            if (hIdx !== -1) myHand.splice(hIdx, 1);
+            myGrave.push(discardId);
+            logMsg(`${tag} Descartó <strong>${getCard(discardId)?.nombre || discardId}</strong> de su mano al cementerio.`, 'var(--accent-purple)');
+
+            if (typeof root.dispatchGraveTriggers === 'function') {
+              root.dispatchGraveTriggers(discardId, 'hand', owner);
+            }
+            updateView();
+            if (cb) cb(true);
+          };
+
+          if (opts && opts.discardId && myHand.includes(opts.discardId)) {
+            return doDiscard(opts.discardId);
+          }
+
+          const isAI = state && state.isDuelVsAI && owner === 'opponent';
+          const openChooser = (typeof root.openCardChooserModal === 'function') ? root.openCardChooserModal : (typeof openCardChooserModal === 'function' ? openCardChooserModal : null);
+          if (!isAI && openChooser && myHand.length > 0 && typeof document !== 'undefined' && document.body) {
+            openChooser(myHand.map(id => ({ id, owner })), "Mapa (SP264): Selecciona 1 carta de tu mano para descartar al cementerio", (discardIdx) => {
+              doDiscard(myHand[discardIdx]);
+            });
+            return true;
+          }
+
+          if (myHand.length > 0) {
+            doDiscard(myHand[myHand.length - 1]);
+          } else {
+            updateView();
+            if (cb) cb(true);
+          }
+          return true;
+        };
+
+        if (opts && opts.selectedId && eligible.includes(opts.selectedId)) {
+          return finishMapa(opts.selectedId);
+        }
+
+        if (eligible.length > 0) {
+          const isAI = state && state.isDuelVsAI && owner === 'opponent';
+          const openChooser = (typeof root.openCardChooserModal === 'function') ? root.openCardChooserModal : (typeof openCardChooserModal === 'function' ? openCardChooserModal : null);
+          if (!isAI && openChooser && typeof document !== 'undefined' && document.body) {
+            openChooser(eligible.map(id => ({ id, owner })), "Mapa (SP264): Selecciona 1 carta revelada para agregar a tu mano", (chosenIdx) => {
+              finishMapa(eligible[chosenIdx]);
+            }, () => {
+              shuffle(myDeck);
+              updateView();
+              if (cb) cb(false);
+            });
+            return true;
+          }
+          return finishMapa(eligible[0]);
+        } else {
+          shuffle(myDeck);
+          logMsg(`${tag} No hubo cartas elegibles entre las reveladas por Mapa.`, 'var(--text-muted)');
+          updateView();
+          if (cb) cb(true);
+          return true;
+        }
       }
     },
 
@@ -717,7 +1156,36 @@
           if (dBench && dBench.length >= 3) return false;
           if (dDeck && !dDeck.some(id => getCard(id)?.tipo === 'Personaje')) return false;
           break;
+        case 'BBX-SP168': {
+          const { myGrave: mGrave, oppSlots: oSlots } = getState(owner);
+          const marinaGraveCount = mGrave.filter(id => {
+            const c = getCard(id);
+            return c && c.tipo === 'Personaje' && c.nombre && c.nombre.includes("Marina");
+          }).length;
+          if (marinaGraveCount === 0) return false;
+          const oppHasSkills = oSlots.some(s => s && s.skills && s.skills.length > 0);
+          if (!oppHasSkills) return false;
+          break;
+        }
+        case 'BBX-SP093': { // Haruka: Descartar 1 carta de mano para portar 1 Skill propia de Haruka desde el deck
+          const { myHand, myDeck } = getState(owner);
+          if (myHand.length === 0) return false;
+          const hasHarukaSkill = myDeck.some(id => {
+            const c = getCard(id);
+            return c && c.tipo === 'Skill' && c.portador && c.portador.includes("Haruka");
+          });
+          if (!hasHarukaSkill) return false;
+          if (typeof root.canEquipFromZone === 'function' && !root.canEquipFromZone('deck')) return false;
+          break;
+        }
+        case 'BBX-SP361': { // Haruka: Requisito 2+ Skills
+          if (skillsCount < 2) return false;
+          const { myDeck } = getState(owner);
+          if (myDeck.length === 0) return false;
+          break;
+        }
         case 'BBX-SP259': // Nobuko: Requisito 1+ Skills
+        case 'BBX-SP267': // Marina: Requisito 1+ Skills
         case 'BBX-SP269': // Haruka: Requisito 1+ Skills
           if (skillsCount < 1) return false;
           break;
@@ -744,11 +1212,13 @@
       const isCurrentTurn = (state.turnOwner === owner);
       if (!isCurrentTurn) return false;
 
-      const usedSkills = slot.usedSkills || [];
-      if (usedSkills.includes(skillId)) return false;
-
-      const usedSkillIdxs = slot.usedSkillIndexes || [];
-      if (typeof skIndex === 'number' && skIndex >= 0 && usedSkillIdxs.includes(skIndex)) return false;
+      if (typeof skIndex === 'number' && skIndex >= 0) {
+        const usedSkillIdxs = slot.usedSkillIndexes || [];
+        if (usedSkillIdxs.includes(skIndex)) return false;
+      } else {
+        const usedSkills = slot.usedSkills || [];
+        if (usedSkills.includes(skillId)) return false;
+      }
 
       // Requisitos específicos por Skill
       const skillsCount = (slot.skills && slot.skills.length) || 0;
@@ -775,6 +1245,20 @@
 
       if (skillId === 'BBX-SP039') { // Ráfaga siniestra: No estar rotado
         if (slot.isRotated) return false;
+      }
+
+      if (skillId === 'BBX-SP188') { // Momento oportuno
+        const { myDeck } = getState(owner);
+        const hasHarukaSkill = myDeck.some(id => {
+          const c = getCard(id);
+          return c && c.tipo === 'Skill' && c.portador && c.portador.includes("Haruka");
+        });
+        if (!hasHarukaSkill) return false;
+      }
+
+      if (skillId === 'BBX-SP264') { // Mapa: Requiere al menos 5 cartas en el deck
+        const { myDeck } = getState(owner);
+        if (myDeck.length < 5) return false;
       }
 
       if (typeof root.isSkillEffectBlocked === 'function' && root.isSkillEffectBlocked(skillId, owner, slot)) {

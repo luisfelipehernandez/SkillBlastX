@@ -153,11 +153,12 @@
         ? root.RulesEngine.isSkillHandEffectBlocked(oppOwner)
         : (typeof root.isSkillHandEffectBlocked === 'function' ? root.isSkillHandEffectBlocked(oppOwner) : false);
 
-      if (opts && opts.useResistir && defenderHand.includes('BBX-SP060') && !isResistirBlocked) {
+      const aiAutoDefend = (state && state.isDuelVsAI && oppOwner === 'opponent');
+      if (((opts && opts.useResistir) || aiAutoDefend) && defenderHand.includes('BBX-SP060') && !isResistirBlocked) {
         const rIdx = defenderHand.indexOf('BBX-SP060');
         defenderHand.splice(rIdx, 1);
         victimSlot.skills.push('BBX-SP060');
-        logMsg(`🛡️ [Reacción Resistir] Se equipó <strong>Resistir (BBX-SP060)</strong> a <strong>${victimCard?.nombre || victimSlot.character}</strong>.`, 'var(--accent-cyan)');
+        logMsg(`🛡️ [Reacción Resistir] Se equipó <strong>Resistir (BBX-SP060)</strong> a <strong>${victimCard?.nombre || victimSlot.character}</strong> para defenderlo en combate.`, 'var(--accent-cyan)');
       }
 
       // Resolución de combate mutuo ("ambos se pegan")
@@ -295,6 +296,23 @@
       let matchEnd = null;
       if (typeof root.checkMatchEndCondition === 'function') {
         matchEnd = root.checkMatchEndCondition();
+      }
+
+      // Regla Oficial Skill Blast X: Al ser destruido en batalla y enviado a la banca, el controlador roba 1 carta
+      if (!matchEnd && !state.matchEnded) {
+        const { myDeck, myHand } = getState(owner);
+        if (myDeck && myDeck.length > 0) {
+          if (owner === 'player' && typeof root.drawCard === 'function') {
+            root.drawCard(null);
+          } else if (owner === 'opponent' && typeof root.opponentDrawCard === 'function') {
+            root.opponentDrawCard(null);
+          } else {
+            const drawn = myDeck.shift();
+            myHand.push(drawn);
+            updateView();
+          }
+          logMsg(`🃏 ${tag} Robó 1 carta por la derrota de su Personaje en batalla.`, 'var(--accent-purple)');
+        }
       }
 
       updateView();

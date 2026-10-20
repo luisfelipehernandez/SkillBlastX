@@ -8,10 +8,10 @@
   const AIDecks = {
     'haruka_campeon': {
       id: 'haruka_campeon',
-      name: 'Haruka (Modo Arcano Campeón)',
+      name: 'IA Haruka',
       character: 'Haruka',
       initialCharacterId: 'BBX-SP093',
-      description: 'Mazo ganador de torneo centrado en Haruka Modo Arcano, cerrojo de mano rival con Ahogarse y Siesta, y tech defensiva con Ryu-chan.',
+      description: 'Mazo centrado en Haruka Modo Arcano con juego flexible según la mano inicial: aceleración con Haruka SP093 o SP331, cerrojo con Ahogarse y Siesta, y remate con ataques múltiples.',
       main: [
         'BBX-SP244', 'BBX-SP244', // 2x Haruka (Modo arcano Avanzada)
         'BBX-SP093',             // 1x Haruka
@@ -45,6 +45,40 @@
         searchPriorities: ['BBX-SP008', 'BBX-SP162', 'BBX-SP200', 'BBX-SP244'],
         maxSkillsPerCharacterEarly: 2,
         evolutionThreshold: 3
+      }
+    },
+    'marina_control': {
+      id: 'marina_control',
+      name: 'Marina (Control de Marea)',
+      character: 'Marina',
+      initialCharacterId: 'BBX-SP267',
+      description: 'Mazo de control y tempo centrado en Marina: excavación con Marina SP267, doble ataque con Marina SP349 y ¡Splash!, búsqueda de Pilares de hielo con Marina SP154 y disrupción con Akua puño, Corriente esmeralda y Marina SP168.',
+      main: [
+        'BBX-SP267', 'BBX-SP267', 'BBX-SP267', // 3x Marina (SP267)
+        'BBX-SP154', 'BBX-SP154', 'BBX-SP154', // 3x Marina (SP154)
+        'BBX-SP349', 'BBX-SP349', 'BBX-SP349', // 3x Marina (SP349)
+        'BBX-SP233', 'BBX-SP233',             // 2x Marina (SP233)
+        'BBX-SP168',                         // 1x Marina (SP168)
+        'BBX-SP125',                         // 1x Nara (SP125)
+        'BBX-SP378', 'BBX-SP378', 'BBX-SP378', // 3x Serenidad (SP378)
+        'BBX-SP028', 'BBX-SP028', 'BBX-SP028', // 3x ¡Splash! (SP028)
+        'BBX-SP421', 'BBX-SP421',             // 2x Voluntad del agua (SP421)
+        'BBX-SP086', 'BBX-SP086',             // 2x Akua finta (SP086)
+        'BBX-SP044', 'BBX-SP044', 'BBX-SP044', // 3x Pilares de hielo (SP044)
+        'BBX-SP342', 'BBX-SP342',             // 2x Planificar (SP342)
+        'BBX-SP224',                         // 1x Relajo (SP224)
+        'BBX-SP187',                         // 1x Akua puño (SP187)
+        'BBX-SP394',                         // 1x Corriente esmeralda (SP394)
+        'BBX-SP155',                         // 1x Grato ocaso (SP155)
+        'BBX-SP210',                         // 1x Doble impetu (SP210)
+        'BBX-SP023', 'BBX-SP023'              // 2x ¡Desatar! (SP023)
+      ],
+      strategy: {
+        openingCharacters: ['BBX-SP267', 'BBX-SP168', 'BBX-SP154', 'BBX-SP349'],
+        handTriggers: ['BBX-SP154', 'BBX-SP349', 'BBX-SP233', 'BBX-SP125'],
+        searchPriorities: ['BBX-SP044', 'BBX-SP028', 'BBX-SP267', 'BBX-SP421', 'BBX-SP378'],
+        maxSkillsPerCharacterEarly: 2,
+        evolutionThreshold: 0
       }
     }
   };

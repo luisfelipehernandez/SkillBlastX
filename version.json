@@ -1,9 +1,9 @@
 {
-  "version": "1.1.9",
-  "version_code": 12,
-  "release_date": "2026-10-17",
+  "version": "1.2.0",
+  "version_code": 13,
+  "release_date": "2026-10-19",
   "name": "Skill Blast X",
-  "description": "Implementación de Ocaso del pasado (BBX-SP265), robustecimiento de menús de fin de turno del rival y sincronización asíncrona de ataques de la IA.",
+  "description": "Corrección de activación independiente para múltiples copias de Mapa (BBX-SP264), prioridad de descarte de Resistir (BBX-SP060) en IA defensiva, feedback interactivo en menús de combate y mejoras en motores de batalla e IA.",
   "repo_url": "https://github.com/luisfelipehernandez/SkillBlastX",
   "raw_base_url": "https://raw.githubusercontent.com/luisfelipehernandez/SkillBlastX/main/"
 }
