@@ -1,9 +1,9 @@
 {
-  "version": "1.2.0",
-  "version_code": 13,
-  "release_date": "2026-10-19",
+  "version": "1.2.1",
+  "version_code": 14,
+  "release_date": "2026-10-21",
   "name": "Skill Blast X",
-  "description": "Corrección de activación independiente para múltiples copias de Mapa (BBX-SP264), prioridad de descarte de Resistir (BBX-SP060) en IA defensiva, feedback interactivo en menús de combate y mejoras en motores de batalla e IA.",
+  "description": "Corrección de portador para ¡Drago-impacto arcano! (BBX-SP245) exclusivo de Haruka Modo arcano, menú de fin de turno de Ocaso del pasado (BBX-SP265) protegido contra auto-cierre al finalizar turno propio, y resolución de elección al azar del adversario para Mapa (BBX-SP264).",
   "repo_url": "https://github.com/luisfelipehernandez/SkillBlastX",
   "raw_base_url": "https://raw.githubusercontent.com/luisfelipehernandez/SkillBlastX/main/"
 }

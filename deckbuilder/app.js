@@ -98,6 +98,9 @@ async function loadAppVersionBadge() {
 // Setup de eventos globales (ej. cerrar menú contextual, drag & drop de zonas de mazo)
 function setupGlobalEvents() {
   window.addEventListener('click', () => {
+    if (window._contextMenuOpenedTimestamp && (Date.now() - window._contextMenuOpenedTimestamp < 150)) {
+      return;
+    }
     hideContextMenu();
   });
 
@@ -2041,7 +2044,14 @@ function shuffleArray(array) {
 
 function isCarrierMatch(carrier, charCard) {
   if (!carrier || !charCard) return false;
-  const cardObj = (typeof charCard === 'string') ? { nombre: charCard } : charCard;
+  let cardObj = charCard;
+  if (typeof charCard === 'string') {
+    if (typeof cardsDatabase !== 'undefined' && cardsDatabase[charCard]) {
+      cardObj = cardsDatabase[charCard];
+    } else {
+      cardObj = { nombre: charCard };
+    }
+  }
   if (!cardObj || !cardObj.nombre) return false;
   if (/\s+o\s+|\s*,\s*/i.test(carrier)) {
     const parts = carrier.split(/\s*,\s*|\s+o\s+/i).map(c => c.trim());
@@ -2063,6 +2073,8 @@ function isCarrierMatch(carrier, charCard) {
   }
   return cardObj.nombre.includes(carrier);
 }
+if (typeof window !== 'undefined') window.isCarrierMatch = isCarrierMatch;
+if (typeof global !== 'undefined') global.isCarrierMatch = isCarrierMatch;
 
 function isIncrustarEspadaActive() {
   if (typeof window.RulesEngine !== 'undefined' && typeof window.RulesEngine.isIncrustarEspadaActive === 'function') {
@@ -2302,7 +2314,10 @@ function passOnlineTurnToOpponent() {
 }
 
 // Acción oficial de "Terminar Turno": Pasa a Fase Final, resuelve efectos y cede el turno al oponente
-function endCurrentTurn() {
+function endCurrentTurn(e) {
+  if (e && typeof e.stopPropagation === 'function') {
+    e.stopPropagation();
+  }
   if (playtestState.matchEnded) {
     return;
   }
@@ -2315,10 +2330,10 @@ function endCurrentTurn() {
       alert("Es el turno de tu rival.");
       return;
     }
-    toggleTurnOwner(true);
+    setTimeout(() => toggleTurnOwner(true), 25);
     return;
   }
-  toggleTurnOwner();
+  setTimeout(() => toggleTurnOwner(), 25);
 }
 
 // Botón de Nuevo Turno (Restaura efectos "Una vez por turno")
@@ -7225,6 +7240,20 @@ function invokeOpponentCharacter(cardId, sourceIndex, slotIndex, sourceZone) {
 function equipOpponentSkill(cardId, sourceIndex, slotIndex, sourceZone) {
   const card = cardsDatabase[cardId];
   const slot = playtestState.opponentSlots[slotIndex];
+  if (!slot || !slot.character) {
+    alert("Necesitas un personaje en el slot rival.");
+    return;
+  }
+  const charCard = cardsDatabase[slot.character];
+
+  // Validar compatibilidad de portador específico
+  if (card && card.portador && charCard) {
+    const allowedCarriers = card.portador.split(/\s*,\s*|\s+o\s+/i).map(c => c.trim());
+    if (!allowedCarriers.some(carrier => isCarrierMatch(carrier, charCard))) {
+      alert(`Esta Skill solo puede ser equipada a ${card.portador}.`);
+      return;
+    }
+  }
   
   if (typeof isSkillBlockedByContratoSP419 === 'function' && isSkillBlockedByContratoSP419(cardId, 'portar')) {
     alert(`La Skill "${card.nombre}" no puede ser portada mientras "Contrato" permanezca portada.`);
@@ -7371,6 +7400,7 @@ function hideContextMenu() {
 }
 
 function showContextMenu(e, items, onDismiss = null) {
+  window._contextMenuOpenedTimestamp = Date.now();
   activeContextMenuDismissHandler = onDismiss;
   const menu = document.getElementById('card-context-menu');
   if (!menu) return;
@@ -16215,7 +16245,10 @@ function showFieldCardMenu(e, slotIndex) {
 
   // Haruka BBX-SP093: Requisito de 1 carta en mano, Skill propia de Haruka en deck y canEquipFromZone('deck')
   if (card.id === 'BBX-SP093') {
-    const isHarukaSkill = (id) => cardsDatabase[id].tipo === 'Skill' && cardsDatabase[id].portador && cardsDatabase[id].portador.includes("Haruka");
+    const isHarukaSkill = (id) => {
+      const sk = cardsDatabase[id];
+      return sk && sk.tipo === 'Skill' && sk.portador && isCarrierMatch(sk.portador, card);
+    };
     const hasHarukaSkillInDeck = playtestState.deck.some(isHarukaSkill);
     if (playtestState.hand.length === 0 || !hasHarukaSkillInDeck || !canEquipFromZone('deck')) {
       canShowEffectOption = false;
@@ -25820,7 +25853,7 @@ function activateSkillFieldEffect(slotIndex, skillId, skIndex) {
     addLog(`[Efecto Mapa] Revelando las primeras 5 cartas del tope de tu deck...`, 'var(--accent-cyan)');
 
     revealCardsSequentially(revealedIds, "Revelando Mazo (Efecto Mapa)", () => {
-      const mapaCardId = revealedIds.find(id => cardsDatabase[id] && cardsDatabase[id].nombre === 'Mapa');
+      const mapaCardId = revealedIds.find(id => id === 'BBX-SP264' || (cardsDatabase[id] && cardsDatabase[id].nombre === 'Mapa'));
 
       if (mapaCardId) {
         const idxInDeck = playtestState.deck.indexOf(mapaCardId);
@@ -25829,7 +25862,7 @@ function activateSkillFieldEffect(slotIndex, skillId, skIndex) {
         }
         playtestState.hand.push(mapaCardId);
         shuffleArray(playtestState.deck);
-        addLog(`[Efecto Mapa] Al estar "Mapa" entre las cartas reveladas, fue agregada automáticamente a tu mano. Barajaste el resto de tu deck.`, 'var(--accent-purple)');
+        addLog(`[Efecto Mapa] Al estar "Mapa" entre las cartas reveladas, debe ser esa la carta agregada por este efecto. Fue agregada automáticamente a tu mano y barajaste el resto de tu deck.`, 'var(--accent-purple)');
         checkAndTriggerInestabilidad('player');
         if (typeof checkAndTriggerMarinaSP391 === 'function') {
           checkAndTriggerMarinaSP391('player', mapaCardId, 'deck', false);
@@ -25842,28 +25875,27 @@ function activateSkillFieldEffect(slotIndex, skillId, skIndex) {
         }
         updatePlaytestView();
       } else {
-        const chooserTargets = revealedIds.map(id => ({ id, owner: 'opponent' }));
-        openCardChooserModal(chooserTargets, "Mapa (Decisión del Adversario): Elige 1 carta para la mano del jugador", (chosenIdx) => {
-          const chosenId = revealedIds[chosenIdx];
-          const idxInDeck = playtestState.deck.indexOf(chosenId);
-          if (idxInDeck !== -1) {
-            playtestState.deck.splice(idxInDeck, 1);
-          }
-          playtestState.hand.push(chosenId);
-          shuffleArray(playtestState.deck);
-          addLog(`[Efecto Mapa] Tu adversario eligió que agregaras a tu mano: <strong>${cardsDatabase[chosenId].nombre}</strong>. Barajaste el resto de tu deck.`, 'var(--accent-purple)');
-          checkAndTriggerInestabilidad('player');
-          if (typeof checkAndTriggerMarinaSP391 === 'function') {
-            checkAndTriggerMarinaSP391('player', chosenId, 'deck', false);
-          }
-          if (typeof checkAndTriggerDiscordiaSiniestraSP399 === 'function') {
-            checkAndTriggerDiscordiaSiniestraSP399('player', chosenId, 'deck', false);
-          }
-          if (typeof checkAndTriggerCiclonDePalmaSP429 === 'function') {
-            checkAndTriggerCiclonDePalmaSP429('player', chosenId, 'deck', false);
-          }
-          updatePlaytestView();
-        });
+        // Decisión del adversario: elección al azar entre las 5 reveladas para la mano del jugador
+        const chosenIdx = Math.floor(Math.random() * revealedIds.length);
+        const chosenId = revealedIds[chosenIdx];
+        const idxInDeck = playtestState.deck.indexOf(chosenId);
+        if (idxInDeck !== -1) {
+          playtestState.deck.splice(idxInDeck, 1);
+        }
+        playtestState.hand.push(chosenId);
+        shuffleArray(playtestState.deck);
+        addLog(`[Efecto Mapa] Tu adversario ha elegido al azar de entre las cartas reveladas: <strong>${cardsDatabase[chosenId]?.nombre || chosenId}</strong> para agregar a tu mano. Barajaste el resto de tu deck.`, 'var(--accent-purple)');
+        checkAndTriggerInestabilidad('player');
+        if (typeof checkAndTriggerMarinaSP391 === 'function') {
+          checkAndTriggerMarinaSP391('player', chosenId, 'deck', false);
+        }
+        if (typeof checkAndTriggerDiscordiaSiniestraSP399 === 'function') {
+          checkAndTriggerDiscordiaSiniestraSP399('player', chosenId, 'deck', false);
+        }
+        if (typeof checkAndTriggerCiclonDePalmaSP429 === 'function') {
+          checkAndTriggerCiclonDePalmaSP429('player', chosenId, 'deck', false);
+        }
+        updatePlaytestView();
       }
     });
     return;
@@ -35185,7 +35217,10 @@ function activateEffect(slotIndex) {
       return;
     }
 
-    const isHarukaSkill = (id) => cardsDatabase[id].tipo === 'Skill' && cardsDatabase[id].portador && cardsDatabase[id].portador.includes("Haruka");
+    const isHarukaSkill = (id) => {
+      const sk = cardsDatabase[id];
+      return sk && sk.tipo === 'Skill' && sk.portador && isCarrierMatch(sk.portador, card);
+    };
     const skillsInDeck = playtestState.deck.filter(isHarukaSkill);
     if (skillsInDeck.length === 0) {
       alert("No quedan Skills de Haruka en tu deck.");

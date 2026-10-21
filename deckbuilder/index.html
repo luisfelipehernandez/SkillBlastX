@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="icon" type="image/x-icon" href="/favicon.ico">
-  <link rel="stylesheet" href="style.css?v=130">
+  <link rel="stylesheet" href="style.css?v=131">
 </head>
 <body>
   <!-- Contenedor Principal de la App -->
@@ -295,8 +295,8 @@
                 <span id="phase-step-end" class="phase-pill" title="Fase Final: Resolución y Fin de Turno">3. FINAL</span>
               </div>
 
-              <button id="btn-toggle-turn" class="btn-toggle-turn-sbx" onclick="endCurrentTurn()">Turno: Jugador</button>
-              <button id="btn-pass-turn" class="btn-pass-turn-sbx" onclick="endCurrentTurn()">⚔️ TERMINAR TURNO</button>
+              <button id="btn-toggle-turn" class="btn-toggle-turn-sbx" onclick="endCurrentTurn(event)">Turno: Jugador</button>
+              <button id="btn-pass-turn" class="btn-pass-turn-sbx" onclick="endCurrentTurn(event)">⚔️ TERMINAR TURNO</button>
               <button id="btn-sound-toggle" class="btn-sound-toggle" onclick="AnimationEngine.toggleSound()" title="Activar/Silenciar Efectos de Sonido">🔊 SFX</button>
             </div>
 
@@ -778,23 +778,23 @@
   </div>
 
   <!-- Networking / P2P Multiplayer -->
-  <script src="js/peerjs.min.js?v=130"></script>
-  <script src="js/network/multiplayerEngine.js?v=130"></script>
+  <script src="js/peerjs.min.js?v=131"></script>
+  <script src="js/network/multiplayerEngine.js?v=131"></script>
 
   <!-- Core Modular Engine -->
-  <script src="js/core/rulesEngine.js?v=130"></script>
-  <script src="js/core/dispatcher.js?v=130"></script>
-  <script src="js/effects/graveEffects.js?v=130"></script>
-  <script src="js/effects/handEffects.js?v=130"></script>
-  <script src="js/effects/benchEffects.js?v=130"></script>
-  <script src="js/effects/fieldEffects.js?v=130"></script>
-  <script src="js/effects/expansionSetEffects.js?v=130"></script>
-  <script src="js/battle/battleEngine.js?v=130"></script>
-  <script src="js/ai/aiDecks.js?v=130"></script>
-  <script src="js/ai/executors/harukaExecutor.js?v=130"></script>
-  <script src="js/ai/aiEngine.js?v=130"></script>
-  <script src="js/ui/animationEngine.js?v=130"></script>
+  <script src="js/core/rulesEngine.js?v=131"></script>
+  <script src="js/core/dispatcher.js?v=131"></script>
+  <script src="js/effects/graveEffects.js?v=131"></script>
+  <script src="js/effects/handEffects.js?v=131"></script>
+  <script src="js/effects/benchEffects.js?v=131"></script>
+  <script src="js/effects/fieldEffects.js?v=131"></script>
+  <script src="js/effects/expansionSetEffects.js?v=131"></script>
+  <script src="js/battle/battleEngine.js?v=131"></script>
+  <script src="js/ai/aiDecks.js?v=131"></script>
+  <script src="js/ai/executors/harukaExecutor.js?v=131"></script>
+  <script src="js/ai/aiEngine.js?v=131"></script>
+  <script src="js/ui/animationEngine.js?v=131"></script>
 
-  <script src="app.js?v=130"></script>
+  <script src="app.js?v=131"></script>
 </body>
 </html>

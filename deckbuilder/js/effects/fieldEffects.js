@@ -988,9 +988,9 @@
         return applyMill(harukaSkills[0]);
       },
 
-      // Mapa (BBX-SP264): Revelar las primeras 5 cartas del tope del deck, robar 1 Personaje/Skill y descartar 1 carta de la mano
+      // Mapa (BBX-SP264): Revelar las primeras 5 cartas del tope del deck, tu adversario elije 1 para tu mano (si Mapa está entre ellas, debe ser esa)
       'BBX-SP264': (slotIndex, skIndex, owner = 'player', opts = {}, cb = null) => {
-        const { state, mySlots, myDeck, myHand, myGrave, tag } = getState(owner);
+        const { state, mySlots, myDeck, myHand, tag } = getState(owner);
         const slot = mySlots[slotIndex];
         if (!slot || myDeck.length < 5) {
           if (cb) cb(false);
@@ -1014,81 +1014,65 @@
         }
 
         const revealed = myDeck.slice(0, 5);
-        logMsg(`${tag} Activó Mapa (SP264): Reveló las primeras 5 cartas del deck.`, 'var(--accent-cyan)');
+        logMsg(`${tag} Activó Mapa (SP264): Reveló las primeras 5 cartas del tope de su deck.`, 'var(--accent-cyan)');
 
-        const eligible = revealed.filter(id => {
-          const c = getCard(id);
-          return c && (c.tipo === 'Personaje' || c.tipo === 'Skill');
-        });
-
-        const finishMapa = (selectedId) => {
+        const finishMapa = (selectedId, wasForcedMapa = false) => {
           const rIdx = myDeck.indexOf(selectedId);
           if (rIdx !== -1) myDeck.splice(rIdx, 1);
           myHand.push(selectedId);
           shuffle(myDeck);
-          logMsg(`${tag} Agregó <strong>${getCard(selectedId)?.nombre || selectedId}</strong> a la mano por Mapa.`, 'var(--accent-cyan)');
 
-          // Descarte de 1 carta de la mano
-          const doDiscard = (discardId) => {
-            const hIdx = myHand.indexOf(discardId);
-            if (hIdx !== -1) myHand.splice(hIdx, 1);
-            myGrave.push(discardId);
-            logMsg(`${tag} Descartó <strong>${getCard(discardId)?.nombre || discardId}</strong> de su mano al cementerio.`, 'var(--accent-purple)');
-
-            if (typeof root.dispatchGraveTriggers === 'function') {
-              root.dispatchGraveTriggers(discardId, 'hand', owner);
-            }
-            updateView();
-            if (cb) cb(true);
-          };
-
-          if (opts && opts.discardId && myHand.includes(opts.discardId)) {
-            return doDiscard(opts.discardId);
-          }
-
-          const isAI = state && state.isDuelVsAI && owner === 'opponent';
-          const openChooser = (typeof root.openCardChooserModal === 'function') ? root.openCardChooserModal : (typeof openCardChooserModal === 'function' ? openCardChooserModal : null);
-          if (!isAI && openChooser && myHand.length > 0 && typeof document !== 'undefined' && document.body) {
-            openChooser(myHand.map(id => ({ id, owner })), "Mapa (SP264): Selecciona 1 carta de tu mano para descartar al cementerio", (discardIdx) => {
-              doDiscard(myHand[discardIdx]);
-            });
-            return true;
-          }
-
-          if (myHand.length > 0) {
-            doDiscard(myHand[myHand.length - 1]);
+          const cardName = getCard(selectedId)?.nombre || selectedId;
+          if (wasForcedMapa) {
+            logMsg(`${tag} [Efecto Mapa] Al estar "Mapa" entre las cartas reveladas, fue agregada obligatoriamente a la mano. Barajó el resto de su deck.`, 'var(--accent-purple)');
           } else {
-            updateView();
-            if (cb) cb(true);
+            logMsg(`${tag} [Efecto Mapa] El adversario eligió <strong>${cardName}</strong> para agregar a la mano. Barajó el resto de su deck.`, 'var(--accent-purple)');
           }
-          return true;
-        };
 
-        if (opts && opts.selectedId && eligible.includes(opts.selectedId)) {
-          return finishMapa(opts.selectedId);
-        }
-
-        if (eligible.length > 0) {
-          const isAI = state && state.isDuelVsAI && owner === 'opponent';
-          const openChooser = (typeof root.openCardChooserModal === 'function') ? root.openCardChooserModal : (typeof openCardChooserModal === 'function' ? openCardChooserModal : null);
-          if (!isAI && openChooser && typeof document !== 'undefined' && document.body) {
-            openChooser(eligible.map(id => ({ id, owner })), "Mapa (SP264): Selecciona 1 carta revelada para agregar a tu mano", (chosenIdx) => {
-              finishMapa(eligible[chosenIdx]);
-            }, () => {
-              shuffle(myDeck);
-              updateView();
-              if (cb) cb(false);
-            });
-            return true;
+          if (typeof root.checkAndTriggerInestabilidad === 'function') {
+            root.checkAndTriggerInestabilidad(owner);
           }
-          return finishMapa(eligible[0]);
-        } else {
-          shuffle(myDeck);
-          logMsg(`${tag} No hubo cartas elegibles entre las reveladas por Mapa.`, 'var(--text-muted)');
+          if (typeof root.checkAndTriggerMarinaSP391 === 'function') {
+            root.checkAndTriggerMarinaSP391(owner, selectedId, 'deck', false);
+          }
+          if (typeof root.checkAndTriggerDiscordiaSiniestraSP399 === 'function') {
+            root.checkAndTriggerDiscordiaSiniestraSP399(owner, selectedId, 'deck', false);
+          }
+          if (typeof root.checkAndTriggerCiclonDePalmaSP429 === 'function') {
+            root.checkAndTriggerCiclonDePalmaSP429(owner, selectedId, 'deck', false);
+          }
+
           updateView();
           if (cb) cb(true);
           return true;
+        };
+
+        // 1. Si "Mapa" está entre las 5 reveladas, obligatoriamente se debe elegir "Mapa"
+        const mapaCardId = revealed.find(id => id === 'BBX-SP264' || getCard(id)?.nombre === 'Mapa');
+        if (mapaCardId) {
+          return finishMapa(mapaCardId, true);
         }
+
+        // 2. Si no hay "Mapa", el adversario elije
+        if (opts && opts.selectedId && revealed.includes(opts.selectedId)) {
+          return finishMapa(opts.selectedId, false);
+        }
+
+        // Si quien activó fue el rival y el adversario es el jugador humano
+        const isOwnerOpponent = (owner === 'opponent');
+        const openChooser = (typeof root.openCardChooserModal === 'function') ? root.openCardChooserModal : (typeof openCardChooserModal === 'function' ? openCardChooserModal : null);
+        if (isOwnerOpponent && openChooser && typeof document !== 'undefined' && document.body && !opts.autoSelect) {
+          const targets = revealed.map(id => ({ id, owner: 'opponent' }));
+          openChooser(targets, "Mapa (Decisión del Adversario): Elige 1 carta del oponente para agregar a su mano", (chosenIdx) => {
+            finishMapa(revealed[chosenIdx], false);
+          });
+          return true;
+        }
+
+        // Si quien activó fue el jugador (o la IA en autoSelect), la elección del oponente es al azar
+        const randomIdx = Math.floor(Math.random() * revealed.length);
+        const chosenRandom = revealed[randomIdx];
+        return finishMapa(chosenRandom, false);
       }
     },
 

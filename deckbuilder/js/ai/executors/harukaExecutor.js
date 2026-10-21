@@ -459,7 +459,14 @@
 
           let canEquip = true;
           if (card.portador) {
-            canEquip = card.portador.includes('Haruka') && charCard.nombre.includes('Haruka');
+            const matcher = (root && typeof root.isCarrierMatch === 'function')
+              ? root.isCarrierMatch
+              : (typeof isCarrierMatch === 'function' ? isCarrierMatch : null);
+            if (matcher) {
+              canEquip = matcher(card.portador, charCard);
+            } else {
+              canEquip = card.portador.includes('Haruka') && charCard.nombre.includes('Haruka');
+            }
           }
 
           // Verificar regla de copia única (ej. Incrustar espada, ¡Inmovilizar!)
