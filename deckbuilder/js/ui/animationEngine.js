@@ -583,6 +583,7 @@
         setTimeout(() => {
           attackerEl.style.zIndex = '';
           attackerEl.style.transition = '';
+          attackerEl.style.transform = '';
           if (callback) callback();
         }, 220);
       }, 220);

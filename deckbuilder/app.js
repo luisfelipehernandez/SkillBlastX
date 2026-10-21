@@ -6561,7 +6561,13 @@ function updatePlaytestView() {
       const cardEl = document.createElement('div');
       cardEl.className = 'in-game-card';
       cardEl.id = `field-card-${i}`;
-      if (slotData.isRotated) cardEl.classList.add('rotated');
+      if (slotData.isRotated) {
+        cardEl.classList.add('rotated');
+        const badge = document.createElement('div');
+        badge.className = 'char-exhausted-badge';
+        badge.textContent = 'AGOTADO';
+        cardEl.appendChild(badge);
+      }
       if (slotData.effectUsed) {
         cardEl.style.boxShadow = '0 0 10px rgba(0, 242, 254, 0.4)';
       }
@@ -6632,7 +6638,13 @@ function updatePlaytestView() {
       const cardEl = document.createElement('div');
       cardEl.className = 'in-game-card';
       cardEl.id = `opp-field-card-${i}`;
-      if (slotData.isRotated) cardEl.classList.add('rotated');
+      if (slotData.isRotated) {
+        cardEl.classList.add('rotated');
+        const badge = document.createElement('div');
+        badge.className = 'char-exhausted-badge';
+        badge.textContent = 'AGOTADO';
+        cardEl.appendChild(badge);
+      }
       if (slotData.effectUsed) {
         cardEl.style.boxShadow = '0 0 10px rgba(255, 60, 60, 0.4)';
       }
@@ -9385,6 +9397,120 @@ if (typeof global !== 'undefined') {
   global.activateOpponentKatherineBenchSP248 = activateOpponentKatherineBenchSP248;
 }
 
+
+function declareAttackAgainstTarget(slotIndex, oppSlotIdx) {
+  const slot = playtestState.slots[slotIndex];
+  if (!slot || !slot.character) return;
+  const card = cardsDatabase[slot.character];
+  const defenderSlot = playtestState.opponentSlots[oppSlotIdx];
+  if (!defenderSlot || !defenderSlot.character) return;
+  const defenderCard = cardsDatabase[defenderSlot.character];
+
+  slot.attacksDeclared = (slot.attacksDeclared || 0) + 1;
+  if (slot.attacksDeclared >= (slot.maxAttacks || 1)) {
+    slot.isRotated = true;
+  }
+
+  addLog(`⚔ <strong>${card.nombre}</strong> declara un ataque contra <strong>${defenderCard.nombre}</strong> (Ataque ${slot.attacksDeclared}/${slot.maxAttacks || 1} de este turno).`, 'var(--accent-danger)');
+  updatePlaytestView();
+
+  if (playtestState.isOnlineMatch && typeof MultiplayerEngine !== 'undefined' && MultiplayerEngine.isConnected()) {
+    const sendAttackPacket = () => {
+      updatePlaytestView();
+      MultiplayerEngine.sendPacket({
+        type: 'ACTION_ATTACK',
+        attackerSlot: slotIndex,
+        targetSlot: oppSlotIdx
+      });
+    };
+    if (typeof checkAndTriggerDobleColisionSP409 === 'function') {
+      checkAndTriggerDobleColisionSP409('player', defenderSlot, sendAttackPacket);
+    } else {
+      sendAttackPacket();
+    }
+    return;
+  }
+
+  if (defenderSlot && defenderSlot.character === 'BBX-SP319') {
+    if (typeof checkAndTriggerChiakoSP319AttackTarget === 'function') {
+      checkAndTriggerChiakoSP319AttackTarget('opponent', oppSlotIdx, 'player');
+    }
+  }
+
+  // Trigger de Resistir (BBX-SP060) en la mano del oponente
+  const resolverDueloDeCombate = () => {
+    const executeDamage = () => {
+      addLog(`[Combate] Resolución de combate: <strong>${card.nombre}</strong> y <strong>${defenderCard.nombre}</strong> se infligen daño mutuo ("se pegan").`, 'var(--accent-warning)');
+      resolveStandardDestruction(slotIndex);
+      resolveOpponentStandardDestruction(oppSlotIdx);
+    };
+    if (typeof window !== 'undefined' && window.AnimationEngine && typeof window.AnimationEngine.animateAttackClash === 'function') {
+      window.AnimationEngine.animateAttackClash(slotIndex, oppSlotIdx, 'player', () => {
+        executeDamage();
+      });
+    } else {
+      executeDamage();
+    }
+  };
+
+  const checkOppResistir = () => {
+    const isOppResistirBlocked = typeof isSkillHandEffectBlocked === 'function' && isSkillHandEffectBlocked('opponent');
+    const oppTieneResistirEnMano = playtestState.opponentHand.includes('BBX-SP060') && !isOppResistirBlocked;
+    if (oppTieneResistirEnMano) {
+      if (playtestState.isDuelVsAI) {
+        const idxInHand = playtestState.opponentHand.indexOf('BBX-SP060');
+        if (idxInHand !== -1) {
+          playtestState.opponentHand.splice(idxInHand, 1);
+          defenderSlot.skills.push('BBX-SP060');
+          addLog(`🤖 [IA Reacción] El Rival activó <strong>Resistir (BBX-SP060)</strong> desde su mano y se la equipó a <strong>${defenderCard.nombre}</strong> para salvarlo del combate.`, 'var(--accent-purple)');
+        }
+        resolverDueloDeCombate();
+        return;
+      }
+      const itemsResistir = [
+        {
+          text: "💥 No activar \"Resistir\" del oponente",
+          action: () => {
+            resolverDueloDeCombate();
+          }
+        },
+        {
+          text: "✊ Activar \"Resistir\" del Oponente (Equipar y Salvar)",
+          action: () => {
+            const idxInHand = playtestState.opponentHand.indexOf('BBX-SP060');
+            if (idxInHand !== -1) {
+              playtestState.opponentHand.splice(idxInHand, 1);
+              defenderSlot.skills.push('BBX-SP060');
+              addLog(`[Efecto Mano] El Oponente activó <strong>Resistir</strong> desde su mano y se la equipó a <strong>${defenderCard.nombre}</strong>.`, 'var(--accent-cyan)');
+              resolverDueloDeCombate();
+            }
+          }
+        }
+      ];
+      const dummyEvent = { clientX: window.innerWidth / 2 - 120, clientY: window.innerHeight / 2 - 80 };
+      showContextMenu(dummyEvent, itemsResistir, () => {
+        resolverDueloDeCombate();
+      });
+    } else {
+      resolverDueloDeCombate();
+    }
+  };
+
+  checkAndTriggerHelicaBenchSP335('opponent', defenderSlot, () => {
+    checkAndTriggerAlterarPacto('opponent', defenderSlot, () => {
+      checkAndTriggerKatshiHandSP344('opponent', defenderSlot, () => {
+        if (typeof checkAndTriggerDobleColisionSP409 === 'function') {
+          checkAndTriggerDobleColisionSP409('player', defenderSlot, () => {
+            checkOppResistir();
+          });
+        } else {
+          checkOppResistir();
+        }
+      });
+    });
+  });
+}
+
 function showOpponentFieldCardMenu(e, slotIndex) {
   e.preventDefault();
   if (playtestState.isOnlineMatch) return;
@@ -9395,28 +9521,131 @@ function showOpponentFieldCardMenu(e, slotIndex) {
     return;
   }
   const card = cardsDatabase[slot.character];
-  if (playtestState.isDuelVsAI) {
-    if (typeof showCardDetail === 'function') showCardDetail(card);
+  if (typeof showCardDetail === 'function') showCardDetail(card);
+
+  const isPlayerTurn = playtestState.turnOwner === 'player';
+  const isOpponentTurn = playtestState.turnOwner === 'opponent';
+
+  // Si es el turno del jugador, ofrecer interactividad para atacar directamente a este personaje enemigo
+  if (isPlayerTurn) {
     const items = [
       {
-        text: `🤖 ${card.nombre} (Controlado por IA)`,
-        disabled: true,
-        action: () => {}
-      },
-      {
-        text: `⚔️ Skills portadas: ${slot.skills ? slot.skills.length : 0}`,
+        text: `🤖 ${card.nombre} (${playtestState.isDuelVsAI ? 'Controlado por IA' : 'Rival'} - ${slot.skills ? slot.skills.length : 0} Skills)`,
         disabled: true,
         action: () => {}
       }
     ];
-    showContextMenu(e, items);
-    return;
+
+    const tieneDragoRefugio = slot.skills && slot.skills.includes('BBX-SP122');
+    const oppControlsRyu = playtestState.opponentSlots.some(os => os.character && cardsDatabase[os.character] && cardsDatabase[os.character].nombre.includes("Ryu-chan")) || (playtestState.opponentBench || []).some(ob => cardsDatabase[ob.id] && cardsDatabase[ob.id].nombre.includes("Ryu-chan"));
+    const isProtectedByDragoRefugio = tieneDragoRefugio && oppControlsRyu;
+
+    const oppOctagonoSlot = playtestState.opponentSlots.find(s => s && s.character && s.skills && s.skills.includes('BBX-SP229'));
+    const isBlockedByOctagono = oppOctagonoSlot && slot !== oppOctagonoSlot;
+
+    const isFirstTurnAttackBlocked = (playtestState.turnCount || 1) === 1;
+
+    if (isFirstTurnAttackBlocked) {
+      items.push({
+        text: "⚔️ Ataque bloqueado (No se puede atacar en Turno 1)",
+        disabled: true,
+        action: () => alert("Regla oficial de Skill Blast X: No se pueden declarar ataques durante el primer turno de la partida (Turno 1).")
+      });
+    } else if (isProtectedByDragoRefugio) {
+      items.push({
+        text: "⚔️ Ataque bloqueado (Protegido por Drago-refugio)",
+        disabled: true,
+        action: () => alert("Este Personaje no puede ser seleccionado como blanco de ataques mientras el rival controle a Ryu-chan (Drago-refugio BBX-SP122).")
+      });
+    } else if (isBlockedByOctagono) {
+      items.push({
+        text: "⚔️ Ataque bloqueado (Obligado a atacar a Octágono)",
+        disabled: true,
+        action: () => alert("Estás obligado a atacar al Personaje que porta Octágono (BBX-SP229).")
+      });
+    } else {
+      const readyAttackers = [];
+      const exhaustedAttackers = [];
+      const otherBlockedAttackers = [];
+
+      const playerCharsCount = playtestState.slots.filter(s => s && s.character).length;
+      const isAttackBlockedByEmblema = typeof isEmblemaFafnirlandActive === 'function' && isEmblemaFafnirlandActive() && playerCharsCount === 1;
+      const mantenimientoRestricted = typeof getMantenimientoRestrictedSlot === 'function' ? getMantenimientoRestrictedSlot() : null;
+
+      playtestState.slots.forEach((pSlot, pIdx) => {
+        if (pSlot && pSlot.character && !pSlot.isFaceDown) {
+          const pCard = cardsDatabase[pSlot.character];
+          const attacksDone = pSlot.attacksDeclared || 0;
+          const maxAtk = pSlot.maxAttacks || 1;
+          const isMantenimiento = mantenimientoRestricted && mantenimientoRestricted.owner === 'player' && mantenimientoRestricted.slotIndex === pIdx;
+          const isPradera = typeof isPraderaActive === 'function' && isPraderaActive() && typeof isCharacterPlayedFromHandThisTurn === 'function' && isCharacterPlayedFromHandThisTurn(pSlot);
+
+          if (attacksDone >= maxAtk || pSlot.isRotated) {
+            exhaustedAttackers.push({ pIdx, card: pCard, attacksDone, maxAtk });
+          } else if (isAttackBlockedByEmblema) {
+            otherBlockedAttackers.push({ pIdx, card: pCard, reason: 'Emblema Fafnirland: solo controlas 1 Personaje' });
+          } else if (isMantenimiento) {
+            otherBlockedAttackers.push({ pIdx, card: pCard, reason: 'Mantenimiento: Personaje con más Skills' });
+          } else if (isPradera) {
+            otherBlockedAttackers.push({ pIdx, card: pCard, reason: 'Pradera: jugado de la mano este turno' });
+          } else {
+            readyAttackers.push({ pIdx, card: pCard, attacksDone, maxAtk });
+          }
+        }
+      });
+
+      if (readyAttackers.length > 0) {
+        readyAttackers.forEach(att => {
+          items.push({
+            text: `⚔️ Atacar a ${card.nombre} con ${att.card.nombre} (Slot ${att.pIdx + 1})`,
+            action: () => {
+              declareAttackAgainstTarget(att.pIdx, slotIndex);
+            }
+          });
+        });
+      } else {
+        if (exhaustedAttackers.length > 0) {
+          const names = exhaustedAttackers.map(a => a.card.nombre).join(', ');
+          items.push({
+            text: `⚠️ Personajes agotados (${names} ya atacó este turno)`,
+            disabled: true,
+            action: () => {
+              alert(`Tus personajes ya atacaron este turno (Límite oficial: 1 ataque por turno por personaje).\n\n💡 Para volver a atacar, presiona el botón "TERMINAR TURNO" para que el rival juegue. En tu próximo turno volverán a estar listos.`);
+            }
+          });
+          items.push({
+            text: "⚔️ TERMINAR TURNO",
+            action: () => {
+              endCurrentTurn();
+            }
+          });
+        } else if (otherBlockedAttackers.length > 0) {
+          otherBlockedAttackers.forEach(b => {
+            items.push({
+              text: `⚠️ ${b.card.nombre}: Ataque bloqueado (${b.reason})`,
+              disabled: true,
+              action: () => alert(`El ataque de ${b.card.nombre} está bloqueado por: ${b.reason}`)
+            });
+          });
+        } else {
+          items.push({
+            text: "⚠️ No controlas ningún personaje en el campo para atacar",
+            disabled: true
+          });
+        }
+      }
+    }
+
+    if (playtestState.isDuelVsAI) {
+      showContextMenu(e, items);
+      return;
+    }
   }
-  
+
   const items = [];
-  
+
   // Ocultación dinámica para efectos del oponente (Bao SP013, Haruka SP244, etc.)
-  const isOpponentTurn = playtestState.turnOwner === 'opponent';
+  // isOpponentTurn ya declarado arriba
   let canActivateOpp = false;
   if (typeof FieldEffects !== 'undefined' && FieldEffects.hasCharacter(card.id)) {
     canActivateOpp = FieldEffects.canActivateCharacter(card.id, slotIndex, 'opponent');
@@ -17272,7 +17501,7 @@ if (typeof global !== 'undefined') global.SKILLS_WITHOUT_FIELD_ACTIVATION = SKIL
           return;
         }
         if ((slot.attacksDeclared || 0) >= (slot.maxAttacks || 1)) {
-          alert(`Este Personaje (${card.nombre}) ya agotó sus ataques en este turno (Límite: ${slot.maxAttacks || 1} ataque por turno).`);
+          alert(`Este Personaje (${card.nombre}) ya realizó su ataque de este turno (Límite oficial: ${slot.maxAttacks || 1} ataque por turno).\n\n💡 Sugerencia: Presiona "TERMINAR TURNO" para que el rival juegue. En tu próximo turno volverá a estar listo.`);
           return;
         }
         if (eligibleOpponents.length === 0) return;
@@ -17280,113 +17509,16 @@ if (typeof global !== 'undefined') global.SKILLS_WITHOUT_FIELD_ACTIVATION = SKIL
         const oppCharacterIds = eligibleOpponents.map(item => item.characterId);
         openCardChooserModal(oppCharacterIds, "Selecciona al personaje del adversario al que deseas atacar", (chosenOppIdx) => {
           const oppSlotIdx = eligibleOpponents[chosenOppIdx].slotIndex;
-          const defenderSlot = playtestState.opponentSlots[oppSlotIdx];
-          const defenderCard = cardsDatabase[defenderSlot.character];
-
-          slot.attacksDeclared = (slot.attacksDeclared || 0) + 1;
-          if (slot.attacksDeclared >= (slot.maxAttacks || 1)) {
-            slot.isRotated = true;
-          }
-
-          addLog(`⚔ <strong>${card.nombre}</strong> declara un ataque contra <strong>${defenderCard.nombre}</strong> (Ataque ${slot.attacksDeclared}/${slot.maxAttacks || 1} de este turno).`, 'var(--accent-danger)');
-          updatePlaytestView();
-
-          if (playtestState.isOnlineMatch && typeof MultiplayerEngine !== 'undefined' && MultiplayerEngine.isConnected()) {
-            const sendAttackPacket = () => {
-              updatePlaytestView();
-              MultiplayerEngine.sendPacket({
-                type: 'ACTION_ATTACK',
-                attackerSlot: slotIndex,
-                targetSlot: oppSlotIdx
-              });
-            };
-            if (typeof checkAndTriggerDobleColisionSP409 === 'function') {
-              checkAndTriggerDobleColisionSP409('player', defenderSlot, sendAttackPacket);
-            } else {
-              sendAttackPacket();
-            }
-            return;
-          }
-
-          if (defenderSlot && defenderSlot.character === 'BBX-SP319') {
-            if (typeof checkAndTriggerChiakoSP319AttackTarget === 'function') {
-              checkAndTriggerChiakoSP319AttackTarget('opponent', oppSlotIdx, 'player');
-            }
-          }
-
-          // Trigger de Resistir (BBX-SP060) en la mano del oponente
-          const resolverDueloDeCombate = () => {
-            const executeDamage = () => {
-              addLog(`[Combate] Resolución de combate: <strong>${card.nombre}</strong> y <strong>${defenderCard.nombre}</strong> se infligen daño mutuo ("se pegan").`, 'var(--accent-warning)');
-              resolveStandardDestruction(slotIndex);
-              resolveOpponentStandardDestruction(oppSlotIdx);
-            };
-            if (typeof window !== 'undefined' && window.AnimationEngine && typeof window.AnimationEngine.animateAttackClash === 'function') {
-              window.AnimationEngine.animateAttackClash(slotIndex, oppSlotIdx, 'player', () => {
-                executeDamage();
-              });
-            } else {
-              executeDamage();
-            }
-          };
-
-          const checkOppResistir = () => {
-            const isOppResistirBlocked = typeof isSkillHandEffectBlocked === 'function' && isSkillHandEffectBlocked('opponent');
-            const oppTieneResistirEnMano = playtestState.opponentHand.includes('BBX-SP060') && !isOppResistirBlocked;
-            if (oppTieneResistirEnMano) {
-              if (playtestState.isDuelVsAI) {
-                const idxInHand = playtestState.opponentHand.indexOf('BBX-SP060');
-                if (idxInHand !== -1) {
-                  playtestState.opponentHand.splice(idxInHand, 1);
-                  defenderSlot.skills.push('BBX-SP060');
-                  addLog(`🤖 [IA Reacción] El Rival activó <strong>Resistir (BBX-SP060)</strong> desde su mano y se la equipó a <strong>${defenderCard.nombre}</strong> para salvarlo del combate.`, 'var(--accent-purple)');
-                }
-                resolverDueloDeCombate();
-                return;
-              }
-              const itemsResistir = [
-                {
-                  text: "💥 No activar \"Resistir\" del oponente",
-                  action: () => {
-                    resolverDueloDeCombate();
-                  }
-                },
-                {
-                  text: "✊ Activar \"Resistir\" del Oponente (Equipar y Salvar)",
-                  action: () => {
-                    const idxInHand = playtestState.opponentHand.indexOf('BBX-SP060');
-                    if (idxInHand !== -1) {
-                      playtestState.opponentHand.splice(idxInHand, 1);
-                      defenderSlot.skills.push('BBX-SP060');
-                      addLog(`[Efecto Mano] El Oponente activó <strong>Resistir</strong> desde su mano y se la equipó a <strong>${defenderCard.nombre}</strong>.`, 'var(--accent-cyan)');
-                      resolverDueloDeCombate();
-                    }
-                  }
-                }
-              ];
-              const dummyEvent = { clientX: window.innerWidth / 2 - 120, clientY: window.innerHeight / 2 - 80 };
-              showContextMenu(dummyEvent, itemsResistir, () => {
-                resolverDueloDeCombate();
-              });
-            } else {
-              resolverDueloDeCombate();
-            }
-          };
-
-          checkAndTriggerHelicaBenchSP335('opponent', defenderSlot, () => {
-            checkAndTriggerAlterarPacto('opponent', defenderSlot, () => {
-              checkAndTriggerKatshiHandSP344('opponent', defenderSlot, () => {
-                if (typeof checkAndTriggerDobleColisionSP409 === 'function') {
-                  checkAndTriggerDobleColisionSP409('player', defenderSlot, () => {
-                    checkOppResistir();
-                  });
-                } else {
-                  checkOppResistir();
-                }
-              });
-            });
-          });
+          declareAttackAgainstTarget(slotIndex, oppSlotIdx);
         });
+    if ((slot.attacksDeclared || 0) >= (slot.maxAttacks || 1)) {
+      items.push({
+        text: "⚔️ TERMINAR TURNO",
+        action: () => {
+          endCurrentTurn();
+        }
+      });
+    }
       }
     });
   }

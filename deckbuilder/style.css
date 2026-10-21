@@ -732,6 +732,26 @@ body {
   box-shadow: 0 0 10px rgba(255, 74, 90, 0.4) !important;
 }
 
+.char-exhausted-badge {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(220, 38, 38, 0.92);
+  border: 1px solid rgba(255, 120, 120, 0.9);
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: 800;
+  padding: 2px 7px;
+  border-radius: 4px;
+  letter-spacing: 0.6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.7);
+  pointer-events: none;
+  z-index: 30;
+  white-space: nowrap;
+  text-transform: uppercase;
+}
+
 /* Zonas de Equipamiento de Skills en Campo */
 .slot-skills {
   display: flex;
@@ -1426,6 +1446,10 @@ body {
   border: 1px solid var(--border-glass);
   border-radius: 10px;
   box-sizing: border-box;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  flex-shrink: 0;
 }
 
 .playtest-header-left {
