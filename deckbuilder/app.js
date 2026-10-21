@@ -6556,6 +6556,9 @@ function updatePlaytestView() {
     
     if (slotData.character) {
       if (placeholder) placeholder.style.display = 'none';
+      slotEl.onclick = (e) => {
+        showFieldCardMenu(e, i);
+      };
       
       const card = cardsDatabase[slotData.character];
       const cardEl = document.createElement('div');
@@ -6617,6 +6620,7 @@ function updatePlaytestView() {
       
       slotEl.appendChild(cardEl);
     } else {
+      slotEl.onclick = null;
       if (placeholder) placeholder.style.display = 'block';
     }
   }
@@ -6632,6 +6636,9 @@ function updatePlaytestView() {
     if (placeholder) slotEl.appendChild(placeholder);
     
     if (slotData.character) {
+      slotEl.onclick = (e) => {
+        showOpponentFieldCardMenu(e, i);
+      };
       if (placeholder) placeholder.style.display = 'none';
       
       const card = cardsDatabase[slotData.character];
@@ -6696,6 +6703,7 @@ function updatePlaytestView() {
       
       slotEl.appendChild(cardEl);
     } else {
+      slotEl.onclick = null;
       if (placeholder) placeholder.style.display = 'block';
     }
   }
@@ -9999,6 +10007,19 @@ function showOpponentEquippedSkillMenu(e, slotIndex, skId, skIndex) {
   }
   const items = [];
   const isOpponentTurn = playtestState.turnOwner === 'opponent';
+  if (playtestState.turnOwner === 'player') {
+    const oppSlot = playtestState.opponentSlots[slotIndex];
+    if (oppSlot && oppSlot.character) {
+      const oppCharCard = cardsDatabase[oppSlot.character];
+      items.push({
+        text: `⚔️ Atacar a ${oppCharCard.nombre} (Ver combate)...`,
+        action: () => {
+          showOpponentFieldCardMenu(e, slotIndex);
+        }
+      });
+      items.push({ type: 'separator' });
+    }
+  }
 
   if (typeof FieldEffects !== 'undefined' && FieldEffects.hasSkill(skId)) {
     const canAct = FieldEffects.canActivateSkill(skId, slotIndex, skIndex, 'opponent');
@@ -10010,6 +10031,23 @@ function showOpponentEquippedSkillMenu(e, slotIndex, skId, skIndex) {
       }
     });
     items.push({ type: 'separator' });
+  }
+
+  // Prominencia divina BBX-SP131 rival
+  if (skId === 'BBX-SP131') {
+    const oppSlot = playtestState.opponentSlots[slotIndex];
+    const isDeida = oppSlot && oppSlot.character && cardsDatabase[oppSlot.character].nombre.includes('Deida');
+    const hasBench = (playtestState.opponentBench || []).length >= 1;
+    const yaUsadoIndex = (oppSlot.usedSkillIndexes || []).includes(skIndex);
+    const yaUsadoCard = (oppSlot.usedSkills || []).includes(skId);
+    if (!yaUsadoCard && !yaUsadoIndex && isDeida && hasBench && (typeof isSkillEffectBlocked !== 'function' || !isSkillEffectBlocked(skId, 'opponent', oppSlot))) {
+      items.push({
+        text: '✨ [RIVAL] Activar Prominencia divina (Hasta 3 ataques este turno)',
+        action: () => {
+          activateOpponentProminenciaDivina(slotIndex, skIndex);
+        }
+      });
+    }
   }
 
   if (skId === 'BBX-SP406') {
@@ -15894,6 +15932,133 @@ function activateEishetHand(owner = 'player', handIndex = -1, onDone = null) {
   }
 }
 
+function getAttackMenuItemForSlot(slotIndex) {
+  const slot = playtestState.slots[slotIndex];
+  if (!slot || !slot.character) return null;
+  const card = cardsDatabase[slot.character];
+  if (!card) return null;
+  if (card.id === 'BBX-SP296' || card.id === 'BBX-SP319') return null;
+
+  const isPlayerTurn = playtestState.turnOwner === 'player';
+  const eligibleOpponents = [];
+  const opponentOctagonoSlot = playtestState.opponentSlots.find(s => s && s.character && s.skills && s.skills.includes('BBX-SP229'));
+
+  playtestState.opponentSlots.forEach((s, idx) => {
+    if (s && s.character) {
+      const tieneDragoRefugio = s.skills && s.skills.includes('BBX-SP122');
+      const oppControlsRyu = playtestState.opponentSlots.some(os => os && os.character && cardsDatabase[os.character] && cardsDatabase[os.character].nombre.includes('Ryu-chan')) || (playtestState.opponentBench || []).some(ob => cardsDatabase[ob.id] && cardsDatabase[ob.id].nombre.includes('Ryu-chan'));
+      if (tieneDragoRefugio && oppControlsRyu) {
+        return;
+      }
+      if (opponentOctagonoSlot && s !== opponentOctagonoSlot) {
+        return;
+      }
+      eligibleOpponents.push({ slotIndex: idx, characterId: s.character });
+    }
+  });
+
+  const mantenimientoRestricted = typeof getMantenimientoRestrictedSlot === 'function' ? getMantenimientoRestrictedSlot() : null;
+  const isAttackBlockedByMantenimiento = mantenimientoRestricted && mantenimientoRestricted.owner === 'player' && mantenimientoRestricted.slotIndex === slotIndex;
+
+  const playerCharsCount = playtestState.slots.filter(s => s && s.character).length;
+  const isAttackBlockedByEmblema = typeof isEmblemaFafnirlandActive === 'function' && isEmblemaFafnirlandActive() && playerCharsCount === 1;
+  const isAttackBlockedByPradera = typeof isPraderaActive === 'function' && isPraderaActive() && typeof isCharacterPlayedFromHandThisTurn === 'function' && isCharacterPlayedFromHandThisTurn(slot);
+
+  const isFirstTurnAttackBlocked = (playtestState.turnCount || 1) === 1;
+  const oppHasCharacters = playtestState.opponentSlots.some(s => s && s.character);
+  const isAttackBlockedByNoTargets = !oppHasCharacters || eligibleOpponents.length === 0;
+
+  const attacksDone = slot.attacksDeclared || 0;
+  const maxAtk = slot.maxAttacks || 1;
+  const isExhausted = attacksDone >= maxAtk || !!slot.isRotated;
+
+  let attackLabel = `⚔ Atacar (${attacksDone}/${maxAtk})`;
+  if (playtestState.matchEnded) {
+    attackLabel = '⚔ Atacar bloqueado (Partida finalizada)';
+  } else if (!isPlayerTurn) {
+    attackLabel = '⚔ Atacar bloqueado (Solo en tu turno)';
+  } else if (isFirstTurnAttackBlocked) {
+    attackLabel = '⚔ Atacar bloqueado (No se puede atacar en Turno 1)';
+  } else if (isAttackBlockedByNoTargets) {
+    attackLabel = '⚔ Atacar bloqueado (Sin objetivos: no hay ataques directos)';
+  } else if (isAttackBlockedByMantenimiento) {
+    attackLabel = '⚔ Atacar bloqueado (Mantenimiento: más Skills)';
+  } else if (isAttackBlockedByEmblema) {
+    attackLabel = '⚔ Atacar bloqueado (Emblema Fafnirland: solo 1 Personaje)';
+  } else if (isAttackBlockedByPradera) {
+    attackLabel = '⚔ Atacar bloqueado (Pradera: jugado de la mano este turno)';
+  } else if (isExhausted) {
+    attackLabel = '⚔ Atacar (Agotado: ya atacó este turno)';
+  }
+
+  const isDisabled = playtestState.matchEnded || !isPlayerTurn || isFirstTurnAttackBlocked || isAttackBlockedByNoTargets || isAttackBlockedByMantenimiento || isAttackBlockedByEmblema || isAttackBlockedByPradera || isExhausted;
+
+  return {
+    text: attackLabel,
+    disabled: isDisabled,
+    isExhausted: isExhausted,
+    attacksDone: attacksDone,
+    maxAtk: maxAtk,
+    action: () => {
+      if (playtestState.matchEnded) {
+        alert('La partida ha terminado.');
+        return;
+      }
+      if (!isPlayerTurn) {
+        alert('Solo puedes declarar ataques durante tu propio turno.');
+        return;
+      }
+      if (isFirstTurnAttackBlocked) {
+        alert('No se pueden declarar ataques durante el primer turno de la partida (Turno 1).');
+        return;
+      }
+      if (isAttackBlockedByNoTargets) {
+        alert('No puedes declarar un ataque: El adversario no tiene personajes en el campo.\n\nEn Skill Blast X no existen los ataques directos ni daño a vida; solo se puede combatir contra Personajes rivales.');
+        return;
+      }
+      if (isAttackBlockedByMantenimiento) {
+        alert('El Personaje con más Skills portadas en el campo no puede atacar debido a Mantenimiento.');
+        return;
+      }
+      if (isAttackBlockedByEmblema) {
+        alert('Ningún jugador puede declarar ataques si controla solo 1 Personaje (Emblema Fafnirland).');
+        return;
+      }
+      if (isAttackBlockedByPradera) {
+        alert('Este Personaje no puede declarar ataques el turno que es jugado desde la mano debido al efecto de Pradera.');
+        return;
+      }
+      if (isExhausted) {
+        alert(`Este Personaje (${card.nombre}) ya realizó sus ataques de este turno (Límite oficial: ${maxAtk} ataque${maxAtk > 1 ? 's' : ''} por turno).\n\n💡 Sugerencia: Presiona "TERMINAR TURNO" para que el rival juegue. En tu próximo turno volverá a estar listo.`);
+        return;
+      }
+      if (eligibleOpponents.length === 0) return;
+
+      const oppCharacterIds = eligibleOpponents.map(item => item.characterId);
+      openCardChooserModal(oppCharacterIds, 'Selecciona al personaje del adversario al que deseas atacar', (chosenOppIdx) => {
+        const oppSlotIdx = eligibleOpponents[chosenOppIdx].slotIndex;
+        declareAttackAgainstTarget(slotIndex, oppSlotIdx);
+      });
+    }
+  };
+}
+
+function activateOpponentProminenciaDivina(slotIndex, skIndex) {
+  const oppSlot = playtestState.opponentSlots[slotIndex];
+  if (!oppSlot || !oppSlot.character) return;
+  const oppCharCard = cardsDatabase[oppSlot.character];
+  oppSlot.maxAttacks = Math.max(oppSlot.maxAttacks || 1, 3);
+  if ((oppSlot.attacksDeclared || 0) < oppSlot.maxAttacks) {
+    oppSlot.isRotated = false;
+  }
+  if (!oppSlot.usedSkillIndexes) oppSlot.usedSkillIndexes = [];
+  oppSlot.usedSkillIndexes.push(skIndex);
+  if (!oppSlot.usedSkills) oppSlot.usedSkills = [];
+  oppSlot.usedSkills.push('BBX-SP131');
+  addLog(`[Efecto Prominencia divina Rival] El límite de ataques de <strong>${oppCharCard.nombre}</strong> rival se ha fijado en hasta 3 ataques para este turno.`, 'var(--accent-purple)');
+  updatePlaytestView();
+}
+
 // Campo
 function showFieldCardMenu(e, slotIndex) {
   const slot = playtestState.slots[slotIndex];
@@ -17419,108 +17584,17 @@ if (typeof global !== 'undefined') global.SKILLS_WITHOUT_FIELD_ACTIVATION = SKIL
     });
   }
 
-  const eligibleOpponents = [];
-  const opponentOctagonoSlot = playtestState.opponentSlots.find(s => s.character && s.skills.includes('BBX-SP229'));
-
-  playtestState.opponentSlots.forEach((s, idx) => {
-    if (s.character) {
-      const tieneDragoRefugio = s.skills.includes('BBX-SP122');
-      const oppControlsRyu = playtestState.opponentSlots.some(os => os.character && cardsDatabase[os.character].nombre.includes("Ryu-chan")) || playtestState.opponentBench.some(ob => cardsDatabase[ob.id].nombre.includes("Ryu-chan"));
-      if (tieneDragoRefugio && oppControlsRyu) {
-        return; // No puede ser atacado
-      }
-      // Regla de Octágono (BBX-SP229): Durante el turno de tu adversario, cada Personaje que controle debe atacar al Personaje que porte esta Skill.
-      if (opponentOctagonoSlot && s !== opponentOctagonoSlot) {
-        return; // Forzado a atacar a Octágono
-      }
-      eligibleOpponents.push({ slotIndex: idx, characterId: s.character });
-    }
-  });
-
-  const mantenimientoRestricted = getMantenimientoRestrictedSlot();
-  const isAttackBlockedByMantenimiento = mantenimientoRestricted && mantenimientoRestricted.owner === 'player' && mantenimientoRestricted.slotIndex === slotIndex;
-
-  const playerCharsCount = playtestState.slots.filter(s => s.character).length;
-  const isAttackBlockedByEmblema = isEmblemaFafnirlandActive() && playerCharsCount === 1;
-  const isAttackBlockedByPradera = isPraderaActive() && isCharacterPlayedFromHandThisTurn(slot);
-
-  const isFirstTurnAttackBlocked = (playtestState.turnCount || 1) === 1;
-  const oppHasCharacters = playtestState.opponentSlots.some(s => s && s.character);
-  const isAttackBlockedByNoTargets = !oppHasCharacters || eligibleOpponents.length === 0;
-
-  let attackLabel = `⚔ Atacar (${slot.attacksDeclared || 0}/${slot.maxAttacks || 1})`;
-  if (playtestState.matchEnded) {
-    attackLabel = `⚔ Atacar bloqueado (Partida finalizada)`;
-  } else if (!isPlayerTurn) {
-    attackLabel = `⚔ Atacar bloqueado (Solo en tu turno)`;
-  } else if (isFirstTurnAttackBlocked) {
-    attackLabel = `⚔ Atacar bloqueado (No se puede atacar en Turno 1)`;
-  } else if (isAttackBlockedByNoTargets) {
-    attackLabel = `⚔ Atacar bloqueado (Sin objetivos: no hay ataques directos)`;
-  } else if (isAttackBlockedByMantenimiento) {
-    attackLabel = `⚔ Atacar bloqueado (Mantenimiento: más Skills)`;
-  } else if (isAttackBlockedByEmblema) {
-    attackLabel = `⚔ Atacar bloqueado (Emblema Fafnirland: solo 1 Personaje)`;
-  } else if (isAttackBlockedByPradera) {
-    attackLabel = `⚔ Atacar bloqueado (Pradera: jugado de la mano este turno)`;
-  } else if ((slot.attacksDeclared || 0) >= (slot.maxAttacks || 1)) {
-    attackLabel = `⚔ Atacar (Agotado: ya atacó este turno)`;
-  }
-
-  if (card.id !== 'BBX-SP296' && card.id !== 'BBX-SP319') {
-    items.push({
-      text: attackLabel,
-      disabled: playtestState.matchEnded || !isPlayerTurn || isFirstTurnAttackBlocked || isAttackBlockedByNoTargets || isAttackBlockedByMantenimiento || isAttackBlockedByEmblema || isAttackBlockedByPradera || (slot.attacksDeclared || 0) >= (slot.maxAttacks || 1),
-      action: () => {
-        if (playtestState.matchEnded) {
-          alert("La partida ha terminado.");
-          return;
-        }
-        if (!isPlayerTurn) {
-          alert("Solo puedes declarar ataques durante tu propio turno.");
-          return;
-        }
-        if (isFirstTurnAttackBlocked) {
-          alert("No se pueden declarar ataques durante el primer turno de la partida (Turno 1).");
-          return;
-        }
-        if (isAttackBlockedByNoTargets) {
-          alert("No puedes declarar un ataque: El adversario no tiene personajes en el campo.\n\nEn Skill Blast X no existen los ataques directos ni daño a vida; solo se puede combatir contra Personajes rivales.");
-          return;
-        }
-        if (isAttackBlockedByMantenimiento) {
-          alert("El Personaje con más Skills portadas en el campo no puede atacar debido a Mantenimiento.");
-          return;
-        }
-        if (isAttackBlockedByEmblema) {
-          alert("Ningún jugador puede declarar ataques si controla solo 1 Personaje (Emblema Fafnirland).");
-          return;
-        }
-        if (isAttackBlockedByPradera) {
-          alert("Este Personaje no puede declarar ataques el turno que es jugado desde la mano debido al efecto de Pradera.");
-          return;
-        }
-        if ((slot.attacksDeclared || 0) >= (slot.maxAttacks || 1)) {
-          alert(`Este Personaje (${card.nombre}) ya realizó su ataque de este turno (Límite oficial: ${slot.maxAttacks || 1} ataque por turno).\n\n💡 Sugerencia: Presiona "TERMINAR TURNO" para que el rival juegue. En tu próximo turno volverá a estar listo.`);
-          return;
-        }
-        if (eligibleOpponents.length === 0) return;
-
-        const oppCharacterIds = eligibleOpponents.map(item => item.characterId);
-        openCardChooserModal(oppCharacterIds, "Selecciona al personaje del adversario al que deseas atacar", (chosenOppIdx) => {
-          const oppSlotIdx = eligibleOpponents[chosenOppIdx].slotIndex;
-          declareAttackAgainstTarget(slotIndex, oppSlotIdx);
-        });
-    if ((slot.attacksDeclared || 0) >= (slot.maxAttacks || 1)) {
+  const attackItem = getAttackMenuItemForSlot(slotIndex);
+  if (attackItem) {
+    items.push(attackItem);
+    if (isPlayerTurn && attackItem.isExhausted) {
       items.push({
-        text: "⚔️ TERMINAR TURNO",
+        text: '⚔️ TERMINAR TURNO',
         action: () => {
           endCurrentTurn();
         }
       });
     }
-      }
-    });
   }
 
   if (items.length === 0) {
@@ -19168,6 +19242,30 @@ function showEquippedSkillMenu(e, slotIndex, skId, skIndex) {
     });
   }
 
+
+  // Acceso directo a declarar ataques con el portador desde cualquier Skill equipada
+  const attackItem = typeof getAttackMenuItemForSlot === 'function' ? getAttackMenuItemForSlot(slotIndex) : null;
+  if (attackItem) {
+    items.push(attackItem);
+    if (isPlayerTurn && attackItem.isExhausted) {
+      items.push({
+        text: '⚔️ TERMINAR TURNO',
+        action: () => {
+          endCurrentTurn();
+        }
+      });
+    }
+  }
+
+  const carrierCard = slot && slot.character ? cardsDatabase[slot.character] : null;
+  if (carrierCard) {
+    items.push({
+      text: `👤 Ver todas las acciones de ${carrierCard.nombre}...`,
+      action: () => {
+        showFieldCardMenu(e, slotIndex);
+      }
+    });
+  }
   showContextMenu(e, items);
 }
 
@@ -27773,7 +27871,10 @@ function activateSkillFieldEffect(slotIndex, skillId, skIndex) {
       return;
     }
 
-    slot.maxAttacks = 3;
+    slot.maxAttacks = Math.max(slot.maxAttacks || 1, 3);
+    if ((slot.attacksDeclared || 0) < slot.maxAttacks) {
+      slot.isRotated = false;
+    }
     addLog(`[Efecto Prominencia divina] El límite de ataques de <strong>${charCard.nombre}</strong> se ha fijado en hasta 3 ataques para este turno.`, 'var(--accent-purple)');
     
     if (!slot.usedSkillIndexes) slot.usedSkillIndexes = [];
