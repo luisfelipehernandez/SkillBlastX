@@ -1,0 +1,9 @@
+{
+  "version": "1.2.3",
+  "version_code": 16,
+  "release_date": "2026-10-21",
+  "name": "Skill Blast X",
+  "description": "Showcase visual de activación en el centro de la pantalla para efectos y reacciones de la IA (incluyendo Resistir BBX-SP060) y ajuste del ritmo de juego para visualización y comprensión óptima de las jugadas.",
+  "repo_url": "https://github.com/luisfelipehernandez/SkillBlastX",
+  "raw_base_url": "https://raw.githubusercontent.com/luisfelipehernandez/SkillBlastX/main/"
+}
