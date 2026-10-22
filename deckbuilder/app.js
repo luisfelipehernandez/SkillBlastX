@@ -9501,6 +9501,13 @@ function declareAttackAgainstTarget(slotIndex, oppSlotIdx) {
           playtestState.opponentHand.splice(idxInHand, 1);
           defenderSlot.skills.push('BBX-SP060');
           addLog(`🤖 [IA Reacción] El Rival activó <strong>Resistir (BBX-SP060)</strong> desde su mano y se la equipó a <strong>${defenderCard.nombre}</strong> para salvarlo del combate.`, 'var(--accent-purple)');
+          updatePlaytestView();
+          if (typeof AnimationEngine !== 'undefined' && typeof AnimationEngine.showCardActivation === 'function') {
+            AnimationEngine.showCardActivation('BBX-SP060', 'opponent', () => {
+              setTimeout(resolverDueloDeCombate, 400);
+            });
+            return;
+          }
         }
         resolverDueloDeCombate();
         return;
@@ -9964,7 +9971,14 @@ function showOpponentFieldCardMenu(e, slotIndex) {
                     if (idxInHand !== -1) {
                       playtestState.hand.splice(idxInHand, 1);
                       targetSlot.skills.push('BBX-SP060');
-                      addLog(`[Efecto Mano] Activaste <strong>Resistir</strong> desde tu mano y se la equipaste a <strong>${targetCard.nombre}</strong>.`, 'var(--accent-cyan)');
+                      addLog(`[Efecto Mano] Activaste <strong>Resistir (BBX-SP060)</strong> desde tu mano y se la equipaste a <strong>${targetCard.nombre}</strong>.`, 'var(--accent-cyan)');
+                      updatePlaytestView();
+                      if (typeof AnimationEngine !== 'undefined' && typeof AnimationEngine.showCardActivation === 'function') {
+                        AnimationEngine.showCardActivation('BBX-SP060', 'player', () => {
+                          setTimeout(resolverCombate, 400);
+                        });
+                        return;
+                      }
                       resolverCombate();
                     }
                   }

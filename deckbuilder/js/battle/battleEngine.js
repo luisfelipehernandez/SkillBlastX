@@ -159,6 +159,9 @@
         defenderHand.splice(rIdx, 1);
         victimSlot.skills.push('BBX-SP060');
         logMsg(`🛡️ [Reacción Resistir] Se equipó <strong>Resistir (BBX-SP060)</strong> a <strong>${victimCard?.nombre || victimSlot.character}</strong> para defenderlo en combate.`, 'var(--accent-cyan)');
+        if (root.AnimationEngine && typeof root.AnimationEngine.showCardActivation === 'function') {
+          root.AnimationEngine.showCardActivation('BBX-SP060', oppOwner);
+        }
       }
 
       // Resolución de combate mutuo ("ambos se pegan")

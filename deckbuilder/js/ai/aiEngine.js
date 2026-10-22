@@ -86,8 +86,21 @@
         }
       };
 
+      // Anunciar visualmente en el centro de la pantalla la activación de cualquier carta o efecto de la IA
+      const announceCardActivation = async (cardId) => {
+        if (!cardId || (options && options.skipDelay)) return;
+        if (typeof root.AnimationEngine !== 'undefined' && typeof root.AnimationEngine.showCardActivation === 'function') {
+          await new Promise(resolve => {
+            root.AnimationEngine.showCardActivation(cardId, 'opponent', resolve);
+          });
+          await delay(350);
+        } else {
+          await delay(800);
+        }
+      };
+
       log(`🤖 <strong>[Turno de la IA: ${executor.name}]</strong> Iniciando secuencia táctica...`, 'var(--accent-purple)');
-      await delay(700);
+      await delay(950);
 
       // -----------------------------------------------------------------------
       // PASO 1: Invocación Táctica (Apertura o Push para Letal)
@@ -107,8 +120,9 @@
           attacksDeclared: 0
         };
         log(`🤖 [IA] Invocó a <strong>${charCard?.nombre || summonPlan.cardId}</strong> al Slot ${summonPlan.targetSlot + 1}${summonPlan.isLethalPush ? ' ⚔️ ¡Presión para Letal!' : ''}.`, 'var(--accent-cyan)');
+        await announceCardActivation(summonPlan.cardId);
         if (typeof root.updatePlaytestView === 'function') root.updatePlaytestView();
-        await delay(800);
+        await delay(900);
       }
 
       // -----------------------------------------------------------------------
@@ -134,8 +148,9 @@
               executed = root[`activateOpponent${bItem.id.replace('BBX-', '')}`](bIdx);
             }
             if (executed !== false) {
+              await announceCardActivation(bItem.id);
               if (typeof root.updatePlaytestView === 'function') root.updatePlaytestView();
-              await delay(800);
+              await delay(900);
             }
           }
         }
@@ -171,6 +186,7 @@
             }
           }
 
+          await announceCardActivation('BBX-SP331');
           log(`🤖 [IA] Descartó a <strong>Haruka (SP331)</strong>: Equipó <strong>¡Voluntad!</strong> desde el deck y envió <strong>${root.cardsDatabase[milledId]?.nombre || 'Skill'}</strong> al cementerio.`, 'var(--accent-purple)');
 
           // Trigger automático de Fulgor ofensivo (SP162)
@@ -208,8 +224,9 @@
             if (cardId === 'BBX-SP092' || cardId === 'BBX-SP098' || cardId === 'BBX-SP223' || cardId === 'BBX-SP340' || cardId === 'BBX-SP373' || cardId === 'BBX-SP360' || cardId === 'BBX-SP154' || cardId === 'BBX-SP114' || cardId === 'BBX-SP349') {
               const executed = root.HandEffects.execute(cardId, hIdx, 'opponent', { autoSelect: true });
               if (executed) {
+                await announceCardActivation(cardId);
                 if (typeof root.updatePlaytestView === 'function') root.updatePlaytestView();
-                await delay(700);
+                await delay(900);
                 break;
               }
             }
@@ -228,8 +245,9 @@
           if (root.FieldEffects && typeof root.FieldEffects.canActivateCharacter === 'function' && root.FieldEffects.canActivateCharacter(s.character, sIdx, 'opponent')) {
             const executed = root.FieldEffects.executeCharacter(s.character, sIdx, 'opponent', { autoSelect: true });
             if (executed) {
+              await announceCardActivation(s.character);
               if (typeof root.updatePlaytestView === 'function') root.updatePlaytestView();
-              await delay(700);
+              await delay(900);
             }
           }
         }
@@ -246,8 +264,9 @@
             if (root.FieldEffects && typeof root.FieldEffects.canActivateSkill === 'function' && root.FieldEffects.canActivateSkill(skillId, sIdx, skIdx, 'opponent')) {
               const executed = root.FieldEffects.executeSkill(skillId, sIdx, skIdx, 'opponent', { autoSelect: true });
               if (executed) {
+                await announceCardActivation(skillId);
                 if (typeof root.updatePlaytestView === 'function') root.updatePlaytestView();
-                await delay(700);
+                await delay(900);
                 break;
               }
             }
@@ -270,6 +289,7 @@
             playtestState.usedGlobalEffects.push('¡Voluntad!');
             const drawn = playtestState.opponentDeck.shift();
             playtestState.opponentHand.push(drawn);
+            await announceCardActivation('BBX-SP008');
             log(`🤖 [IA] Activó el efecto de <strong>¡Voluntad!</strong> y robó 1 carta de su deck.`, 'var(--accent-cyan)');
             if (typeof root.updatePlaytestView === 'function') root.updatePlaytestView();
             await delay(700);
@@ -279,6 +299,7 @@
           const dIdx = slot ? slot.skills.indexOf('BBX-SP023') : -1;
           const globalUsed = playtestState.usedGlobalEffects || [];
           if (dIdx !== -1 && !globalUsed.includes('¡Desatar!') && !globalUsed.includes('BBX-SP023')) {
+            await announceCardActivation('BBX-SP023');
             slot.skills.splice(dIdx, 1);
             playtestState.opponentGrave.push('BBX-SP023');
             playtestState.usedGlobalEffects = globalUsed;
@@ -318,6 +339,7 @@
               playtestState.opponentHand.push(foundSkill);
               slot.effectUsed = true;
               if (typeof root.shuffleArray === 'function') root.shuffleArray(playtestState.opponentDeck);
+              await announceCardActivation('BBX-SP244');
               log(`📖 [IA] Haruka Modo Arcano (SP244) buscó <strong>${root.cardsDatabase[foundSkill]?.nombre}</strong> de su deck y la añadió a su mano.`, 'var(--accent-cyan)');
               if (typeof root.checkAndTriggerInestabilidad === 'function') root.checkAndTriggerInestabilidad('opponent');
               if (typeof root.updatePlaytestView === 'function') root.updatePlaytestView();
@@ -339,6 +361,7 @@
               }
             }
             if (milledId) {
+              await announceCardActivation('BBX-SP188');
               log(`⚡ [IA] Activó <strong>Momento oportuno</strong>: Envió <strong>${root.cardsDatabase[milledId]?.nombre}</strong> al cementerio.`, 'var(--accent-purple)');
               if (milledId === 'BBX-SP162') {
                 const fIdx = playtestState.opponentGrave.indexOf('BBX-SP162');
@@ -367,6 +390,7 @@
             const discardedId = playtestState.opponentHand.splice(fieldAction.discardIndex, 1)[0];
             playtestState.opponentGrave.push(discardedId);
             slot.effectUsed = true;
+            await announceCardActivation('BBX-SP093');
             log(`🤖 [IA] Haruka (SP093) descartó <strong>${root.cardsDatabase[discardedId]?.nombre}</strong> como costo.`, 'var(--accent-purple)');
             let equipId = null;
             for (const prefId of fieldAction.equipPreference) {
@@ -399,6 +423,7 @@
               const drawn1 = playtestState.opponentDeck.shift();
               const drawn2 = playtestState.opponentDeck.shift();
               playtestState.opponentHand.push(drawn1, drawn2);
+              await announceCardActivation('BBX-SP033');
               log(`⚡ [IA] Activó <strong>Carga destello</strong>: Envió Carga destello y ${root.cardsDatabase[sacrificed]?.nombre} al cementerio y robó 2 cartas.`, 'var(--accent-cyan)');
               if (typeof root.updatePlaytestView === 'function') root.updatePlaytestView();
               await delay(800);
@@ -417,6 +442,7 @@
             if (skillIdx !== -1) {
               const picked = revealed.splice(skillIdx, 1)[0];
               playtestState.opponentHand.push(picked);
+              await announceCardActivation('BBX-SP361');
               log(`🔍 [IA] Haruka (SP361) reveló 3 cartas y añadió <strong>${root.cardsDatabase[picked]?.nombre}</strong> a su mano.`, 'var(--accent-cyan)');
             }
             revealed.forEach(id => playtestState.opponentDeck.push(id));
@@ -439,6 +465,7 @@
             if (gIdx !== -1) {
               const recovered = playtestState.opponentGrave.splice(gIdx, 1)[0];
               slot.skills.push(recovered);
+              await announceCardActivation('BBX-SP390');
               log(`✨ [IA] Activó <strong>Destello perspicaz</strong>: Barajó 1 carta al deck y portó <strong>${root.cardsDatabase[recovered]?.nombre}</strong> desde el cementerio.`, 'var(--accent-cyan)');
               if (typeof root.updatePlaytestView === 'function') root.updatePlaytestView();
               await delay(800);
@@ -461,6 +488,7 @@
             if (typeof root.shuffleArray === 'function') root.shuffleArray(playtestState.opponentDeck);
             const wiped = playerSlotWithSkills.skills.splice(0, playerSlotWithSkills.skills.length);
             wiped.forEach(id => playtestState.grave.push(id));
+            await announceCardActivation('BBX-SP245');
             log(`💥 [IA] Activó <strong>¡Drago-impacto arcano!</strong>: Barajó 2 cartas y barrió todas las Skills de ${root.cardsDatabase[playerSlotWithSkills.character]?.nombre} al cementerio (${wiped.length} skills).`, 'var(--accent-purple)');
             if (typeof root.updatePlaytestView === 'function') root.updatePlaytestView();
             await delay(800);
@@ -477,6 +505,7 @@
             if (gIdx !== -1) {
               const recovered = playtestState.opponentGrave.splice(gIdx, 1)[0];
               playtestState.opponentHand.push(recovered);
+              await announceCardActivation('BBX-SP037');
               log(`♻️ [IA] Activó <strong>Encaminar</strong>: Recuperó <strong>${root.cardsDatabase[recovered]?.nombre}</strong> del cementerio a su mano.`, 'var(--accent-cyan)');
               if (typeof root.updatePlaytestView === 'function') root.updatePlaytestView();
               await delay(800);
@@ -488,6 +517,7 @@
             slot.usedSkills = slot.usedSkills || [];
             slot.usedSkills.push('BBX-SP004');
             slot.maxAttacks = Math.max(slot.maxAttacks || 1, 2);
+            await announceCardActivation('BBX-SP004');
             log(`⚔️ [IA] Activó <strong>Ataque Destello</strong>: Haruka puede realizar hasta 2 ataques este turno.`, 'var(--accent-purple)');
             if (typeof root.updatePlaytestView === 'function') root.updatePlaytestView();
             await delay(800);
@@ -499,6 +529,7 @@
             slot.usedSkills = slot.usedSkills || [];
             slot.usedSkills.push('BBX-SP067');
             slot.maxAttacks = 4;
+            await announceCardActivation('BBX-SP067');
             log(`🔥 [IA] ¡Activó <strong>Sobrecarga destello</strong>! (2 en banca): Haruka desata hasta 4 ataques este turno.`, 'var(--accent-danger)');
             if (typeof root.updatePlaytestView === 'function') root.updatePlaytestView();
             await delay(800);
@@ -520,7 +551,7 @@
         log(`🛡️ [IA] Equipó <strong>${root.cardsDatabase[cardToEquip]?.nombre}</strong> a ${root.cardsDatabase[targetSlot.character]?.nombre}.`, 'var(--accent-purple)');
         maxEquipsPerTurn--;
         if (typeof root.updatePlaytestView === 'function') root.updatePlaytestView();
-        await delay(600);
+        await delay(950);
       }
 
       // -----------------------------------------------------------------------
@@ -533,6 +564,7 @@
         const oldChar = targetSlot.character;
         targetSlot.character = evoCardId;
         log(`⚡ [IA] ¡Evolucionó a <strong>Haruka (Modo Arcano Avanzada)</strong> sobre ${root.cardsDatabase[oldChar]?.nombre}!`, 'var(--accent-cyan)');
+        await announceCardActivation(evoCardId);
 
         // Efecto de Haruka Avanzada BBX-SP244: buscar 1 skill de Haruka en el deck
         if (evoCardId === 'BBX-SP244') {
@@ -626,7 +658,7 @@
 
             // Esperar obligatoriamente a que el jugador termine cualquier selección modal o menú de daño/reacción
             await waitForPendingModalsAndMenus();
-            await delay(400);
+            await delay(850);
 
             if (typeof root.checkMatchEndCondition === 'function') {
               const mEnd = root.checkMatchEndCondition();
@@ -634,7 +666,7 @@
             }
 
             if (typeof root.updatePlaytestView === 'function') root.updatePlaytestView();
-            await delay(500);
+            await delay(950);
           }
           maxAttacks--;
         }
