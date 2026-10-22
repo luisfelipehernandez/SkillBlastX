@@ -1,7 +1,7 @@
+const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const assert = require('assert');
 
 function createMockElement(id = '') {
   return {
@@ -14,21 +14,29 @@ function createMockElement(id = '') {
       contains(c) { return this._classes.has(c); }
     },
     addEventListener() {},
+    removeEventListener() {},
     dispatchEvent() {},
     appendChild(child) { return child; },
     querySelector() { return createMockElement(); },
     querySelectorAll() { return []; },
     remove() {},
+    closest() { return null; },
+    setAttribute() {},
+    getAttribute() { return null; },
+    removeAttribute() {},
     innerHTML: '',
-    textContent: ''
+    textContent: '',
+    getBoundingClientRect: () => ({ left: 0, top: 0, width: 50, height: 50 })
   };
 }
 
 const sandbox = {
   console: console,
-  setTimeout: (fn, ms) => setTimeout(fn, ms),
-  clearTimeout: (id) => clearTimeout(id),
-  alert: (msg) => console.log('Mock alert:', msg),
+  setTimeout: (fn) => { fn(); return 1; },
+  clearTimeout: () => {},
+  setInterval: () => {},
+  clearInterval: () => {},
+  alert: () => {},
   addEventListener: () => {},
   removeEventListener: () => {},
   window: {},
@@ -37,68 +45,75 @@ const sandbox = {
     createElement: (tag) => createMockElement(tag),
     querySelector: () => createMockElement(),
     querySelectorAll: () => [],
+    body: createMockElement('body'),
     addEventListener: () => {},
-    body: createMockElement('body')
+    removeEventListener: () => {}
   },
-  Date: Date,
-  Math: Math,
-  Array: Array,
-  Object: Object,
-  JSON: JSON,
-  Set: Set,
-  parseInt: parseInt
+  localStorage: { getItem: () => null, setItem: () => {} }
 };
 sandbox.window = sandbox;
 sandbox.global = sandbox;
-sandbox.root = sandbox;
+sandbox.globalThis = sandbox;
 
 vm.createContext(sandbox);
 
-// 1. Cargar cardsDatabase desde cartas.json
-const cartasPath = path.resolve(__dirname, '../cartas.json');
-const cardsData = JSON.parse(fs.readFileSync(cartasPath, 'utf8'));
-sandbox.cardsDatabase = {};
-cardsData.forEach(c => sandbox.cardsDatabase[c.id] = c);
+// Cargar scripts necesarios
+const scripts = [
+  'js/core/rulesEngine.js',
+  'js/core/dispatcher.js',
+  'js/effects/fieldEffects.js',
+  'js/ai/aiDecks.js',
+  'js/ai/executors/harukaExecutor.js',
+  'js/ai/aiEngine.js',
+  'app.js'
+];
 
-// 2. Cargar app.js en sandbox
-const appCode = fs.readFileSync(path.resolve(__dirname, 'app.js'), 'utf8');
-vm.runInContext(appCode, sandbox);
+for (const scr of scripts) {
+  const scrPath = path.resolve(__dirname, scr);
+  if (fs.existsSync(scrPath)) {
+    const code = fs.readFileSync(scrPath, 'utf8');
+    vm.runInContext(code, sandbox);
+  }
+}
 
-// Repoblar cardsDatabase tras la inicialización de app.js
-cardsData.forEach(c => sandbox.cardsDatabase[c.id] = c);
+// Cargar cartas y poblar cardsDatabase existente
+const cartasPath = fs.existsSync(path.resolve(__dirname, 'cartas.json'))
+  ? path.resolve(__dirname, 'cartas.json')
+  : path.resolve(__dirname, '../cartas.json');
+const rawCards = JSON.parse(fs.readFileSync(cartasPath, 'utf8'));
 
-// 3. Cargar executors y effects
-const harukaCode = fs.readFileSync(path.resolve(__dirname, 'js/ai/executors/harukaExecutor.js'), 'utf8');
-vm.runInContext(harukaCode, sandbox);
+sandbox.cardsDatabase = sandbox.cardsDatabase || {};
+rawCards.forEach(c => {
+  sandbox.cardsDatabase[c.id] = c;
+});
+if (sandbox.window) sandbox.window.cardsDatabase = sandbox.cardsDatabase;
+if (sandbox.global) sandbox.global.cardsDatabase = sandbox.cardsDatabase;
 
-const fieldEffectsCode = fs.readFileSync(path.resolve(__dirname, 'js/effects/fieldEffects.js'), 'utf8');
-vm.runInContext(fieldEffectsCode, sandbox);
-
-console.log('--- TEST 1: ¡Drago-impacto arcano! (BBX-SP245) Carrier Compatibility ---');
-const harukaNormal = sandbox.cardsDatabase['BBX-SP093'];
-const harukaArcano = sandbox.cardsDatabase['BBX-SP100'];
+console.log('--- TEST 1: ¡Drago-impacto arcano! (BBX-SP245) Carrier Compatibility & AI Rules ---');
+const harukaNormal = sandbox.cardsDatabase['BBX-SP093'] || sandbox.cardsDatabase['BBX-SP001'];
+const harukaArcano = sandbox.cardsDatabase['BBX-SP100'] || sandbox.cardsDatabase['BBX-SP244'];
 const dragoImpacto = sandbox.cardsDatabase['BBX-SP245'];
 
 assert.strictEqual(sandbox.isCarrierMatch(dragoImpacto.portador, harukaNormal), false, 'Haruka normal NO debe poder portar Drago-impacto arcano');
 assert.strictEqual(sandbox.isCarrierMatch(dragoImpacto.portador, harukaArcano), true, 'Haruka Modo arcano SÍ debe poder portar Drago-impacto arcano');
 console.log('✔ PASS: isCarrierMatch discrimina correctamente entre Haruka normal (false) y Haruka Modo arcano (true).');
 
-// Test de la IA Haruka
-const hand = ['BBX-SP245']; // Solo Drago-impacto arcano en mano
-const mySlots = [
+// 1.1 Test de la IA Haruka (Equipar)
+const hand = ['BBX-SP245'];
+const mySlotsNormal = [
   {
-    character: 'BBX-SP093', // Haruka normal
+    character: harukaNormal.id, // Haruka normal
     skills: []
   }
 ];
-const equipAction = sandbox.HarukaExecutor.getEquipAction(hand, mySlots);
+const equipAction = sandbox.HarukaExecutor.getEquipAction(hand, mySlotsNormal);
 assert.strictEqual(equipAction, null, 'La IA de Haruka no debe equipar Drago-impacto arcano a una Haruka normal');
 console.log('✔ PASS: harukaExecutor rechaza equipar Drago-impacto arcano a Haruka normal.');
 
-// Test de Haruka Modo Arcano con la IA
+// 1.2 Test de Haruka Modo Arcano con la IA (Equipar)
 const mySlotsArcana = [
   {
-    character: 'BBX-SP100', // Haruka Modo arcano
+    character: harukaArcano.id, // Haruka Modo arcano
     skills: []
   }
 ];
@@ -107,8 +122,62 @@ assert.notStrictEqual(equipActionArcana, null, 'La IA de Haruka sí debe poder e
 assert.strictEqual(equipActionArcana.cardId, 'BBX-SP245');
 console.log('✔ PASS: harukaExecutor permite equipar Drago-impacto arcano a Haruka Modo arcano.');
 
-console.log('\n--- TEST 2: Mapa (BBX-SP264) Choice Logic ---');
-// Caso 2.1: Mapa está entre las 5 primeras del deck
+// 1.3 Test de la IA Haruka (Activar en campo): Mismas reglas que el jugador humano
+// Caso: Haruka normal con BBX-SP245
+const normalSlotWithDrago = [
+  {
+    character: harukaNormal.id,
+    skills: ['BBX-SP245'],
+    usedSkills: [],
+    effectUsed: true
+  }
+];
+const oppSlotsWithManySkills = [
+  {
+    character: 'BBX-SP002',
+    skills: ['BBX-SP003', 'BBX-SP004']
+  }
+];
+const fieldActionNormal = sandbox.HarukaExecutor.getFieldAction(normalSlotWithDrago, ['BBX-SP005', 'BBX-SP006'], [], [], oppSlotsWithManySkills);
+assert.strictEqual(fieldActionNormal?.type !== 'activate_drago_impacto', true, 'La IA NO debe activar Drago-impacto arcano si el personaje no es Haruka/Modo arcano');
+assert.strictEqual(fieldActionNormal, null, 'No debe haber acción de Drago-impacto disponible para Haruka normal');
+console.log('✔ PASS: harukaExecutor.getFieldAction() bloquea activar Drago-impacto arcano en Haruka normal.');
+
+// Caso: Haruka Modo arcano con BBX-SP245
+const arcanaSlotWithDrago = [
+  {
+    character: harukaArcano.id,
+    skills: ['BBX-SP245'],
+    usedSkills: [],
+    effectUsed: true
+  }
+];
+const fieldActionArcana = sandbox.HarukaExecutor.getFieldAction(arcanaSlotWithDrago, ['BBX-SP005', 'BBX-SP006'], [], [], oppSlotsWithManySkills);
+assert.notStrictEqual(fieldActionArcana, null, 'La IA SÍ debe poder activar Drago-impacto arcano en Haruka Modo arcano');
+assert.strictEqual(fieldActionArcana.type, 'activate_drago_impacto');
+console.log('✔ PASS: harukaExecutor.getFieldAction() permite activar Drago-impacto arcano en Haruka Modo arcano.');
+
+// 1.4 Test canActivateSkill para BBX-SP245 (Simétrico para IA y Jugador)
+sandbox.playtestState = {
+  turnOwner: 'opponent',
+  deck: [],
+  hand: [],
+  grave: [],
+  slots: [{ character: 'BBX-SP002', skills: ['BBX-SP003'] }],
+  opponentSlots: normalSlotWithDrago,
+  opponentDeck: [],
+  opponentHand: ['BBX-SP005', 'BBX-SP006'],
+  opponentGrave: []
+};
+assert.strictEqual(sandbox.FieldEffects.canActivateSkill('BBX-SP245', 0, 0, 'opponent'), false, 'FieldEffects.canActivateSkill debe ser false para Haruka normal');
+
+sandbox.playtestState.opponentSlots = arcanaSlotWithDrago;
+assert.strictEqual(sandbox.FieldEffects.canActivateSkill('BBX-SP245', 0, 0, 'opponent'), true, 'FieldEffects.canActivateSkill debe ser true para Haruka Modo arcano');
+console.log('✔ PASS: FieldEffects.canActivateSkill respeta la restricción idéntica para IA y humanos.');
+
+
+console.log('\n--- TEST 2: Mapa (BBX-SP264) Choice Logic (IA vs Partida VS) ---');
+// Caso 2.1: Mapa está entre las 5 primeras del deck -> Regla obligatoria
 sandbox.playtestState = {
   turnOwner: 'player',
   deck: ['BBX-SP001', 'BBX-SP002', 'BBX-SP264', 'BBX-SP003', 'BBX-SP004', 'BBX-SP005'],
@@ -130,8 +199,10 @@ assert.strictEqual(sandbox.playtestState.hand.length, 1);
 assert.strictEqual(cbResult1, true);
 console.log('✔ PASS: Si "Mapa" está entre las 5 reveladas, se agrega automáticamente "Mapa" obligatoriamente.');
 
-// Caso 2.2: Mapa NO está entre las 5 primeras -> Adversario elige al azar para la mano del jugador
+// Caso 2.2: Duelo contra la IA (isDuelVsAI = true): La máquina elige al azar para el jugador
 sandbox.playtestState = {
+  isDuelVsAI: true,
+  isOnlineMatch: false,
   turnOwner: 'player',
   deck: ['BBX-SP001', 'BBX-SP002', 'BBX-SP003', 'BBX-SP004', 'BBX-SP005', 'BBX-SP006'],
   hand: [],
@@ -143,18 +214,50 @@ sandbox.playtestState = {
   opponentGrave: []
 };
 
-let chooserOpened = false;
-sandbox.openCardChooserModal = () => { chooserOpened = true; };
+let modalOpenedInAI = false;
+sandbox.openCardChooserModal = () => { modalOpenedInAI = true; };
 
 let cbResult2 = false;
 sandbox.FieldEffects.executeSkill('BBX-SP264', 0, 0, 'player', {}, (success) => {
   cbResult2 = success;
 });
-assert.strictEqual(chooserOpened, false, 'No debe abrirse el chooser modal al jugador cuando el adversario toma la decisión');
-assert.strictEqual(sandbox.playtestState.hand.length, 1, 'El adversario debió agregar 1 carta al azar a la mano del jugador');
+assert.strictEqual(modalOpenedInAI, false, 'En modo vs IA no debe abrirse modal para pedirle al jugador que elija');
+assert.strictEqual(sandbox.playtestState.hand.length, 1, 'La IA debió elegir 1 carta al azar para la mano del jugador');
 assert.strictEqual(['BBX-SP001', 'BBX-SP002', 'BBX-SP003', 'BBX-SP004', 'BBX-SP005'].includes(sandbox.playtestState.hand[0]), true);
 assert.strictEqual(cbResult2, true);
-console.log('✔ PASS: Si "Mapa" no está entre las 5 reveladas, el adversario elige al azar sin pedirle al jugador.');
+console.log('✔ PASS: En duelo vs IA, la IA toma la decisión al azar sin pedirle al jugador.');
+
+// Caso 2.3: Duelo Local VS / Sandbox (isDuelVsAI = false, isOnlineMatch = false): El rival humano elige interactivamente
+sandbox.playtestState = {
+  isDuelVsAI: false,
+  isOnlineMatch: false,
+  turnOwner: 'player',
+  deck: ['BBX-SP001', 'BBX-SP002', 'BBX-SP003', 'BBX-SP004', 'BBX-SP005', 'BBX-SP006'],
+  hand: [],
+  grave: [],
+  slots: [{ character: 'BBX-SP001', skills: ['BBX-SP264'], usedSkills: [], usedSkillIndexes: [] }],
+  opponentSlots: [],
+  opponentDeck: [],
+  opponentHand: [],
+  opponentGrave: []
+};
+
+let modalOpenedInLocalVS = false;
+let modalOnSelect = null;
+sandbox.openCardChooserModal = (cards, title, onSelect) => {
+  modalOpenedInLocalVS = true;
+  modalOnSelect = onSelect;
+};
+
+sandbox.FieldEffects.executeSkill('BBX-SP264', 0, 0, 'player', {}, () => {});
+assert.strictEqual(modalOpenedInLocalVS, true, 'En duelo local VS debe abrirse el modal para que el adversario humano elija');
+console.log('✔ PASS: En partida local VS, se abre el modal interactivo para que el rival humano elija.');
+
+// El adversario humano elige la carta en índice 3 ('BBX-SP004')
+modalOnSelect(3);
+assert.strictEqual(sandbox.playtestState.hand[0], 'BBX-SP004', 'La carta agregada a la mano debe ser exactamente la elegida por el adversario humano');
+console.log('✔ PASS: La elección interactiva del adversario humano se aplica exactamente a la mano del jugador.');
+
 
 console.log('\n--- TEST 3: Ocaso del pasado (BBX-SP265) & End-Turn Safety ---');
 assert.strictEqual(typeof sandbox.endCurrentTurn, 'function');
@@ -163,10 +266,8 @@ assert.strictEqual(typeof sandbox.hideContextMenu, 'function');
 
 // Probar protección timestamp de context menu
 sandbox._contextMenuOpenedTimestamp = Date.now();
-// Simular click inmediato (< 150ms)
 let dismissed = false;
 sandbox.activeContextMenuDismissHandler = () => { dismissed = true; };
-// Llamar al handler que window.addEventListener('click') ejecuta:
 const checkClickDismiss = () => {
   if (sandbox._contextMenuOpenedTimestamp && (Date.now() - sandbox._contextMenuOpenedTimestamp < 150)) {
     return; // Protegido!
@@ -178,5 +279,5 @@ assert.strictEqual(dismissed, false, 'El menú contextual NO debe cerrarse inmed
 console.log('✔ PASS: Protección de timestamp previene el cierre prematuro del menú de fin de turno.');
 
 console.log('\n=================================================');
-console.log('🎉 TODOS LOS TESTS DE LOS 3 ERRORES PASARON 100%');
+console.log('TODAS LAS PRUEBAS UNITARIAS PASARON EXITOSAMENTE!');
 console.log('=================================================');

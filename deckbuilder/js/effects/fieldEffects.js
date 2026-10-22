@@ -1058,18 +1058,31 @@
           return finishMapa(opts.selectedId, false);
         }
 
-        // Si quien activó fue el rival y el adversario es el jugador humano
+        // Diferenciación de elección del adversario (Humano vs IA):
         const isOwnerOpponent = (owner === 'opponent');
         const openChooser = (typeof root.openCardChooserModal === 'function') ? root.openCardChooserModal : (typeof openCardChooserModal === 'function' ? openCardChooserModal : null);
-        if (isOwnerOpponent && openChooser && typeof document !== 'undefined' && document.body && !opts.autoSelect) {
-          const targets = revealed.map(id => ({ id, owner: 'opponent' }));
-          openChooser(targets, "Mapa (Decisión del Adversario): Elige 1 carta del oponente para agregar a su mano", (chosenIdx) => {
-            finishMapa(revealed[chosenIdx], false);
-          });
-          return true;
+
+        if (isOwnerOpponent) {
+          // Dueño de la habilidad es el rival -> Adversario es el jugador local humano
+          if (openChooser && typeof document !== 'undefined' && document.body && !opts.autoSelect) {
+            const targets = revealed.map(id => ({ id, owner: 'opponent' }));
+            openChooser(targets, "Mapa (Decisión del Adversario): Elige 1 carta del oponente para agregar a su mano", (chosenIdx) => {
+              finishMapa(revealed[chosenIdx], false);
+            });
+            return true;
+          }
+        } else {
+          // Dueño de la habilidad es 'player'
+          if (!state.isDuelVsAI && !state.isOnlineMatch && openChooser && typeof document !== 'undefined' && document.body && !opts.autoSelect) {
+            // Modo VS Local / Sandbox: El adversario humano sentado en la máquina elige interactivamente
+            openChooser(revealed, "Efecto Mapa (Elección del Adversario): Elige 1 carta para la mano de tu rival", (chosenIdx) => {
+              finishMapa(revealed[chosenIdx], false);
+            });
+            return true;
+          }
         }
 
-        // Si quien activó fue el jugador (o la IA en autoSelect), la elección del oponente es al azar
+        // Contra la IA (state.isDuelVsAI) o en autoSelect / fallback: la IA elige al azar
         const randomIdx = Math.floor(Math.random() * revealed.length);
         const chosenRandom = revealed[randomIdx];
         return finishMapa(chosenRandom, false);
@@ -1238,6 +1251,18 @@
           return c && c.tipo === 'Skill' && c.portador && c.portador.includes("Haruka");
         });
         if (!hasHarukaSkill) return false;
+      }
+
+      if (skillId === 'BBX-SP245') { // ¡Drago-impacto arcano! (Portador exclusivo Haruka/Modo arcano)
+        const { myHand, oppSlots } = getState(owner);
+        if (!myHand || myHand.length < 2) return false;
+        const oppHasSkills = (oppSlots || []).some(s => s && s.character && s.skills && s.skills.length > 0);
+        if (!oppHasSkills) return false;
+        const charCard = getCard(slot.character);
+        const matcher = (typeof root.isCarrierMatch === 'function')
+          ? root.isCarrierMatch
+          : (typeof isCarrierMatch === 'function' ? isCarrierMatch : null);
+        if (matcher && !matcher('Haruka/Modo arcano', charCard)) return false;
       }
 
       if (skillId === 'BBX-SP264') { // Mapa: Requiere al menos 5 cartas en el deck

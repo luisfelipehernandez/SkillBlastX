@@ -17290,11 +17290,13 @@ if (typeof global !== 'undefined') global.SKILLS_WITHOUT_FIELD_ACTIVATION = SKIL
         }
       }
 
-      // Si es ¡Drago-impacto arcano! (BBX-SP245), verificar 2 cartas en mano, oponente con Skills elegibles y que no se haya usado este turno
+      // Si es ¡Drago-impacto arcano! (BBX-SP245), verificar que el portador sea Haruka/Modo arcano, 2 cartas en mano, oponente con Skills elegibles y que no se haya usado este turno
       if (skillId === 'BBX-SP245') {
+        const charCard = cardsDatabase[slot.character];
+        const isHarukaArcana = isCarrierMatch('Haruka/Modo arcano', charCard);
         const hasEnoughHand = playtestState.hand.length >= 2;
         const oppHasSkills = playtestState.opponentSlots.some(s => s.character && s.skills && s.skills.some(sk => canRemoveSkillByEffect(sk, true, 'player', s, 'grave')));
-        if (yaUsado || !hasEnoughHand || !oppHasSkills || isSkillEffectBlocked(skillId, 'player', slot)) {
+        if (!isHarukaArcana || yaUsado || !hasEnoughHand || !oppHasSkills || isSkillEffectBlocked(skillId, 'player', slot)) {
           return;
         }
       }
@@ -18523,10 +18525,12 @@ function showEquippedSkillMenu(e, slotIndex, skId, skIndex) {
     }
 
     if (skId === 'BBX-SP245') { // ¡Drago-impacto arcano!
+      const charCard = cardsDatabase[slot.character];
+      const isHarukaArcana = isCarrierMatch('Haruka/Modo arcano', charCard);
       const yaUsadoIndex = (slot.usedSkillIndexes || []).includes(skIndex);
       const hasEnoughHand = playtestState.hand.length >= 2;
       const oppHasSkills = playtestState.opponentSlots.some(s => s.character && s.skills && s.skills.some(sk => canRemoveSkillByEffect(sk, true, 'player', s, 'grave')));
-      if (yaUsadoIndex || !hasEnoughHand || !oppHasSkills || isSkillEffectBlocked(skId, 'player', slot)) {
+      if (!isHarukaArcana || yaUsadoIndex || !hasEnoughHand || !oppHasSkills || isSkillEffectBlocked(skId, 'player', slot)) {
         canActivate = false;
       }
     }
@@ -25855,36 +25859,19 @@ function activateSkillFieldEffect(slotIndex, skillId, skIndex) {
     revealCardsSequentially(revealedIds, "Revelando Mazo (Efecto Mapa)", () => {
       const mapaCardId = revealedIds.find(id => id === 'BBX-SP264' || (cardsDatabase[id] && cardsDatabase[id].nombre === 'Mapa'));
 
-      if (mapaCardId) {
-        const idxInDeck = playtestState.deck.indexOf(mapaCardId);
-        if (idxInDeck !== -1) {
-          playtestState.deck.splice(idxInDeck, 1);
-        }
-        playtestState.hand.push(mapaCardId);
-        shuffleArray(playtestState.deck);
-        addLog(`[Efecto Mapa] Al estar "Mapa" entre las cartas reveladas, debe ser esa la carta agregada por este efecto. Fue agregada automáticamente a tu mano y barajaste el resto de tu deck.`, 'var(--accent-purple)');
-        checkAndTriggerInestabilidad('player');
-        if (typeof checkAndTriggerMarinaSP391 === 'function') {
-          checkAndTriggerMarinaSP391('player', mapaCardId, 'deck', false);
-        }
-        if (typeof checkAndTriggerDiscordiaSiniestraSP399 === 'function') {
-          checkAndTriggerDiscordiaSiniestraSP399('player', mapaCardId, 'deck', false);
-        }
-        if (typeof checkAndTriggerCiclonDePalmaSP429 === 'function') {
-          checkAndTriggerCiclonDePalmaSP429('player', mapaCardId, 'deck', false);
-        }
-        updatePlaytestView();
-      } else {
-        // Decisión del adversario: elección al azar entre las 5 reveladas para la mano del jugador
-        const chosenIdx = Math.floor(Math.random() * revealedIds.length);
-        const chosenId = revealedIds[chosenIdx];
+      const applyMapaChoice = (chosenId, isRandomChoice = false) => {
         const idxInDeck = playtestState.deck.indexOf(chosenId);
         if (idxInDeck !== -1) {
           playtestState.deck.splice(idxInDeck, 1);
         }
         playtestState.hand.push(chosenId);
         shuffleArray(playtestState.deck);
-        addLog(`[Efecto Mapa] Tu adversario ha elegido al azar de entre las cartas reveladas: <strong>${cardsDatabase[chosenId]?.nombre || chosenId}</strong> para agregar a tu mano. Barajaste el resto de tu deck.`, 'var(--accent-purple)');
+        const cardName = cardsDatabase[chosenId]?.nombre || chosenId;
+        if (isRandomChoice) {
+          addLog(`[Efecto Mapa] Tu adversario (IA) ha elegido al azar de entre las cartas reveladas: <strong>${cardName}</strong> para agregar a tu mano. Barajaste el resto de tu deck.`, 'var(--accent-purple)');
+        } else {
+          addLog(`[Efecto Mapa] Tu adversario ha elegido de entre las cartas reveladas: <strong>${cardName}</strong> para agregar a tu mano. Barajaste el resto de tu deck.`, 'var(--accent-purple)');
+        }
         checkAndTriggerInestabilidad('player');
         if (typeof checkAndTriggerMarinaSP391 === 'function') {
           checkAndTriggerMarinaSP391('player', chosenId, 'deck', false);
@@ -25896,6 +25883,29 @@ function activateSkillFieldEffect(slotIndex, skillId, skIndex) {
           checkAndTriggerCiclonDePalmaSP429('player', chosenId, 'deck', false);
         }
         updatePlaytestView();
+      };
+
+      if (mapaCardId) {
+        // Regla obligatoria: si Mapa está entre las 5 reveladas, debe ser esa
+        applyMapaChoice(mapaCardId, false);
+      } else if (playtestState.isDuelVsAI) {
+        // En duelo contra la IA: La máquina realiza la elección al azar
+        const chosenIdx = Math.floor(Math.random() * revealedIds.length);
+        const chosenId = revealedIds[chosenIdx];
+        applyMapaChoice(chosenId, true);
+      } else if (playtestState.isOnlineMatch && typeof MultiplayerEngine !== 'undefined' && MultiplayerEngine.isConnected()) {
+        // En partida Online Multijugador: El rival remoto elige en su pantalla
+        addLog(`[Efecto Mapa] Esperando a que tu adversario elija una carta para tu mano...`, 'var(--accent-cyan)');
+        MultiplayerEngine.sendReactionTriggerToPeer('MAPA_SP264', { revealedIds }, (res) => {
+          const chosenId = (res && res.chosenId && revealedIds.includes(res.chosenId)) ? res.chosenId : revealedIds[0];
+          applyMapaChoice(chosenId, false);
+        });
+      } else {
+        // En partida VS Local / Sandbox: El adversario humano elige interactivamente en pantalla
+        openCardChooserModal(revealedIds, "Efecto Mapa (Elección del Adversario): Elige 1 carta para la mano de tu rival", (chosenIdx) => {
+          const chosenId = revealedIds[chosenIdx];
+          applyMapaChoice(chosenId, false);
+        });
       }
     });
     return;
@@ -30703,6 +30713,11 @@ function activateSkillFieldEffect(slotIndex, skillId, skIndex) {
 
   // ¡Drago-impacto arcano! BBX-SP245 (Portador: Haruka/Modo arcano - Una vez por turno, puedes barajar a tu deck 2 cartas en tu mano y enviar al cementerio todas las Skills portadas en un Personaje de tu adversario.)
   if (skillId === 'BBX-SP245') {
+    const charCard = cardsDatabase[slot.character];
+    if (!isCarrierMatch('Haruka/Modo arcano', charCard)) {
+      alert("¡Drago-impacto arcano! solo puede ser activado por Haruka/Modo arcano.");
+      return;
+    }
     const effectiveSkIndex = (typeof skIndex === 'number') ? skIndex : slot.skills.indexOf(skillId);
     const yaUsadoIndex = (slot.usedSkillIndexes || []).includes(effectiveSkIndex);
     if (yaUsadoIndex) {

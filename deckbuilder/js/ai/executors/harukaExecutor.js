@@ -272,8 +272,15 @@
 
         // ---------------------------------------------------------------------
         // 2. ¡Drago-impacto arcano! (BBX-SP245): Barrido de Skills rivales
+        // Restricción idéntica a jugadores humanos: solo usable por Haruka/Modo arcano
         // ---------------------------------------------------------------------
-        if (slot.skills.includes('BBX-SP245') && !slot.usedSkills?.includes('BBX-SP245') && hand.length >= 2 && oppCarryingManySkills) {
+        const charCard = (root && root.cardsDatabase && root.cardsDatabase[slot.character]) || (typeof cardsDatabase !== 'undefined' && cardsDatabase[slot.character]) || null;
+        const matcher = (root && typeof root.isCarrierMatch === 'function')
+          ? root.isCarrierMatch
+          : (typeof isCarrierMatch === 'function' ? isCarrierMatch : null);
+        const canUseDrago = matcher ? matcher('Haruka/Modo arcano', charCard) : (charCard && (charCard.id === 'BBX-SP244' || charCard.nombre?.includes('Modo arcano')));
+
+        if (canUseDrago && slot.skills.includes('BBX-SP245') && !slot.usedSkills?.includes('BBX-SP245') && hand.length >= 2 && oppCarryingManySkills) {
           return { type: 'activate_drago_impacto', slotIndex: sIdx, skillId: 'BBX-SP245' };
         }
 

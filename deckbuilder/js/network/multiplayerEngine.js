@@ -1214,12 +1214,13 @@ const MultiplayerEngine = (() => {
     isApplyingRemotePacket = false;
 
     const { requestId, triggerType, payload = {} } = packet;
-    const finishReaction = () => {
+    const finishReaction = (result = null) => {
       if (typeof updatePlaytestView === 'function') updatePlaytestView();
       syncStateIfChanged();
       sendPacket({
         type: 'REMOTE_REACTION_DONE',
-        requestId
+        requestId,
+        result
       });
     };
 
@@ -1233,6 +1234,16 @@ const MultiplayerEngine = (() => {
       checkAndTriggerBaoSP356(finishReaction, true);
     } else if (triggerType === 'DUALIDAD_SP428' && typeof checkAndTriggerDualidadSP428 === 'function') {
       checkAndTriggerDualidadSP428('opponent', payload.slotIndex, payload.playedCharId, {}, finishReaction);
+    } else if (triggerType === 'MAPA_SP264') {
+      const revealed = payload.revealedIds || [];
+      const openChooser = (typeof openCardChooserModal === 'function') ? openCardChooserModal : (typeof window !== 'undefined' ? window.openCardChooserModal : null);
+      if (revealed.length > 0 && openChooser) {
+        openChooser(revealed, "Efecto Mapa del adversario: Elige 1 carta para agregar a su mano", (chosenIdx) => {
+          finishReaction({ chosenId: revealed[chosenIdx] });
+        });
+      } else {
+        finishReaction({ chosenId: revealed[0] || null });
+      }
     } else {
       finishReaction();
     }
@@ -1245,7 +1256,7 @@ const MultiplayerEngine = (() => {
     isApplyingRemotePacket = false;
 
     if (typeof entry.onDone === 'function') {
-      entry.onDone();
+      entry.onDone(packet.result);
     }
     if (typeof updatePlaytestView === 'function') updatePlaytestView();
     syncStateIfChanged();

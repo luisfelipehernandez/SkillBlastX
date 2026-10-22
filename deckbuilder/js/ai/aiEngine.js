@@ -446,8 +446,13 @@
           }
         } else if (fieldAction.type === 'activate_drago_impacto') {
           const slot = playtestState.opponentSlots[fieldAction.slotIndex];
+          const charCard = slot ? root.cardsDatabase[slot.character] : null;
+          const matcher = (root && typeof root.isCarrierMatch === 'function')
+            ? root.isCarrierMatch
+            : (typeof isCarrierMatch === 'function' ? isCarrierMatch : null);
+          const validCarrier = matcher ? matcher('Haruka/Modo arcano', charCard) : (charCard && (charCard.id === 'BBX-SP244' || charCard.nombre?.includes('Modo arcano')));
           const playerSlotWithSkills = (playtestState.slots || []).find(s => s && s.character && s.skills && s.skills.length > 0);
-          if (slot && playerSlotWithSkills && playtestState.opponentHand.length >= 2) {
+          if (slot && validCarrier && playerSlotWithSkills && playtestState.opponentHand.length >= 2) {
             slot.usedSkills = slot.usedSkills || [];
             slot.usedSkills.push('BBX-SP245');
             const s1 = playtestState.opponentHand.pop();

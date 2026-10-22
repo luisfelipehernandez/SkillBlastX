@@ -1,9 +1,9 @@
 {
-  "version": "1.2.1",
-  "version_code": 14,
+  "version": "1.2.2",
+  "version_code": 15,
   "release_date": "2026-10-21",
   "name": "Skill Blast X",
-  "description": "Corrección de portador para ¡Drago-impacto arcano! (BBX-SP245) exclusivo de Haruka Modo arcano, menú de fin de turno de Ocaso del pasado (BBX-SP265) protegido contra auto-cierre al finalizar turno propio, y resolución de elección al azar del adversario para Mapa (BBX-SP264).",
+  "description": "Simetría estricta de portador en IA y jugadores para ¡Drago-impacto arcano! (BBX-SP245) exigiendo Haruka Modo arcano, y resolución bifurcada de Mapa (BBX-SP264) con elección al azar exclusiva para la IA y selección interactiva del adversario humano en partidas VS locales y multijugador online.",
   "repo_url": "https://github.com/luisfelipehernandez/SkillBlastX",
   "raw_base_url": "https://raw.githubusercontent.com/luisfelipehernandez/SkillBlastX/main/"
 }
