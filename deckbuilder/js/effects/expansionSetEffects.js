@@ -128,6 +128,43 @@
     const skRealIdx = slot.skills.indexOf('BBX-SP316');
     slot.skills.splice(skRealIdx, 1);
     myGrave.push('BBX-SP316');
+    if (typeof root.addLog === 'function') {
+      root.addLog(`[Encantamiento] Enviaste <strong>Encantamiento</strong> al cementerio.`, 'var(--accent-purple)');
+    }
+
+    const step3Recycle = () => {
+      const proceedRecycle = (toRecycleId) => {
+        const gIdx = myGrave.indexOf(toRecycleId);
+        if (gIdx !== -1) myGrave.splice(gIdx, 1);
+        myDeck.push(toRecycleId);
+        if (typeof root.shuffleArray === 'function') root.shuffleArray(myDeck);
+        if (typeof root.addLog === 'function') {
+          root.addLog(`[Encantamiento] Barajaste <strong>${root.cardsDatabase[toRecycleId]?.nombre || toRecycleId}</strong> de tu cementerio a tu deck.`, 'var(--accent-purple)');
+        }
+        if (typeof root.updatePlaytestView === 'function') root.updatePlaytestView();
+      };
+
+      if (myGrave.length === 0) {
+        if (typeof root.updatePlaytestView === 'function') root.updatePlaytestView();
+        return;
+      }
+
+      if (typeof onChosenRecycle === 'function') {
+        const toRecycleId = onChosenRecycle(myGrave);
+        if (toRecycleId) proceedRecycle(toRecycleId);
+        else if (typeof root.updatePlaytestView === 'function') root.updatePlaytestView();
+        return;
+      }
+
+      if (isPlayer && typeof root.openCardChooserModal === 'function') {
+        const chooserGrave = myGrave.map(id => ({ id, owner: 'player' }));
+        root.openCardChooserModal(chooserGrave, "Encantamiento: Selecciona 1 carta de tu cementerio para barajar al deck", (chosenIdx) => {
+          proceedRecycle(myGrave[chosenIdx]);
+        });
+      } else {
+        proceedRecycle(myGrave[0]);
+      }
+    };
 
     // 2. Enviar 1 Skill propia de Eishet del deck al cementerio
     const eishetSkillsInDeck = myDeck.filter(id => {
@@ -135,29 +172,39 @@
       return c && c.tipo === 'Skill' && c.portador && c.portador.includes('Eishet');
     });
 
-    if (eishetSkillsInDeck.length > 0) {
-      const chosenSkillId = (typeof onChosenEishetSkill === 'function') ? onChosenEishetSkill(eishetSkillsInDeck) : eishetSkillsInDeck[0];
+    const proceedSkillSend = (chosenSkillId) => {
       const dIdx = myDeck.indexOf(chosenSkillId);
       if (dIdx !== -1) myDeck.splice(dIdx, 1);
       myGrave.push(chosenSkillId);
       if (typeof root.addLog === 'function') {
-        root.addLog(`[Encantamiento] Enviaste <strong>${root.cardsDatabase[chosenSkillId].nombre}</strong> de tu deck al cementerio.`, 'var(--accent-purple)');
+        root.addLog(`[Encantamiento] Enviaste <strong>${root.cardsDatabase[chosenSkillId]?.nombre || chosenSkillId}</strong> de tu deck al cementerio.`, 'var(--accent-purple)');
       }
-    }
+      step3Recycle();
+    };
 
-    // 3. Barajar 1 carta del cementerio al deck
-    if (myGrave.length > 0) {
-      const toRecycleId = (typeof onChosenRecycle === 'function') ? onChosenRecycle(myGrave) : myGrave[0];
-      const gIdx = myGrave.indexOf(toRecycleId);
-      if (gIdx !== -1) myGrave.splice(gIdx, 1);
-      myDeck.push(toRecycleId);
+    if (eishetSkillsInDeck.length === 0) {
       if (typeof root.addLog === 'function') {
-        root.addLog(`[Encantamiento] Barajaste <strong>${root.cardsDatabase[toRecycleId].nombre}</strong> de tu cementerio a tu deck.`, 'var(--accent-purple)');
+        root.addLog(`[Encantamiento] No quedan Skills propias de Eishet en tu deck.`, 'var(--text-muted)');
       }
+      step3Recycle();
+      return true;
     }
 
-    if (typeof root.shuffleArray === 'function') root.shuffleArray(myDeck);
-    if (typeof root.updatePlaytestView === 'function') root.updatePlaytestView();
+    if (typeof onChosenEishetSkill === 'function') {
+      const chosenSkillId = onChosenEishetSkill(eishetSkillsInDeck);
+      proceedSkillSend(chosenSkillId || eishetSkillsInDeck[0]);
+      return true;
+    }
+
+    if (isPlayer && typeof root.openCardChooserModal === 'function') {
+      const chooserSkills = eishetSkillsInDeck.map(id => ({ id, owner: 'player' }));
+      root.openCardChooserModal(chooserSkills, "Encantamiento: Selecciona 1 Skill propia de Eishet de tu deck para enviar al cementerio", (chosenIdx) => {
+        proceedSkillSend(eishetSkillsInDeck[chosenIdx]);
+      });
+      return true;
+    }
+
+    proceedSkillSend(eishetSkillsInDeck[0]);
     return true;
   }
 
@@ -309,25 +356,40 @@
     usedList.push('BBX-SP322');
 
     const eishetCharsInDeck = myDeck.filter(id => root.cardsDatabase[id]?.tipo === 'Personaje' && root.cardsDatabase[id]?.nombre?.includes('Eishet'));
-    const chosenCharId = (typeof onChosenEishet === 'function') ? onChosenEishet(eishetCharsInDeck) : eishetCharsInDeck[0];
+    if (eishetCharsInDeck.length === 0) return false;
 
-    const dIdx = myDeck.indexOf(chosenCharId);
-    if (dIdx !== -1) myDeck.splice(dIdx, 1);
+    const performDeploy = (chosenCharId) => {
+      const dIdx = myDeck.indexOf(chosenCharId);
+      if (dIdx !== -1) myDeck.splice(dIdx, 1);
 
-    const freeSlotIdx = mySlots.findIndex(s => s && !s.character);
-    if (freeSlotIdx !== -1) {
-      mySlots[freeSlotIdx].character = chosenCharId;
-      mySlots[freeSlotIdx].skills = [];
-      mySlots[freeSlotIdx].isRotated = false;
-      mySlots[freeSlotIdx].effectUsed = false;
-      mySlots[freeSlotIdx].playedFromHand = false;
+      const freeSlotIdx = mySlots.findIndex(s => s && !s.character);
+      if (freeSlotIdx !== -1) {
+        mySlots[freeSlotIdx].character = chosenCharId;
+        mySlots[freeSlotIdx].skills = [];
+        mySlots[freeSlotIdx].isRotated = false;
+        mySlots[freeSlotIdx].effectUsed = false;
+        mySlots[freeSlotIdx].playedFromHand = false;
+      }
+
+      if (typeof root.shuffleArray === 'function') root.shuffleArray(myDeck);
+      if (typeof root.addLog === 'function') {
+        root.addLog(`[Ocaso insidioso] Jugaste a <strong>${root.cardsDatabase[chosenCharId].nombre}</strong> directamente desde tu deck al campo (Slot ${freeSlotIdx + 1}).`, 'var(--accent-purple)');
+      }
+      if (typeof root.updatePlaytestView === 'function') root.updatePlaytestView();
+      return true;
+    };
+
+    if (typeof onChosenEishet === 'function') {
+      return performDeploy(onChosenEishet(eishetCharsInDeck));
     }
-
-    if (typeof root.shuffleArray === 'function') root.shuffleArray(myDeck);
-    if (typeof root.addLog === 'function') {
-      root.addLog(`[Ocaso insidioso] Jugaste a <strong>${root.cardsDatabase[chosenCharId].nombre}</strong> directamente desde tu deck al campo (Slot ${freeSlotIdx + 1}).`, 'var(--accent-purple)');
+    if (!isPlayer || typeof root.openCardChooserModal !== 'function' || eishetCharsInDeck.length === 1) {
+      return performDeploy(eishetCharsInDeck[0]);
     }
-    if (typeof root.updatePlaytestView === 'function') root.updatePlaytestView();
+    const chooserTargets = eishetCharsInDeck.map(id => ({ id, from: 'deck', owner: 'player' }));
+    root.openCardChooserModal(chooserTargets, "Ocaso insidioso (SP322): Selecciona 1 Personaje Eishet para jugar desde tu deck", (chosenIdx) => {
+      performDeploy(eishetCharsInDeck[chosenIdx] || eishetCharsInDeck[0]);
+    });
+    return true;
     return true;
   }
 
@@ -541,43 +603,80 @@
     myGrave.push('BBX-SP328');
     usedList.push('Caos carmesí');
 
+    const step3Draw = () => {
+      // 3. Robar 1 carta de tu deck
+      if (myDeck.length > 0) {
+        myHand.push(myDeck.shift());
+        if (typeof root.addLog === 'function') {
+          root.addLog(`[Caos carmesí] Robaste 1 carta de tu deck.`, 'var(--accent-purple)');
+        }
+      }
+      if (typeof root.updatePlaytestView === 'function') root.updatePlaytestView();
+    };
+
     // 2. Barajar 1 Skill portada en el campo al deck de su dueño
     const candidateSkills = [];
     playtestState.slots.forEach((s, sIdx) => {
       if (s && s.skills) {
-        s.skills.forEach((sk, kIdx) => candidateSkills.push({ skId: sk, slotOwner: 'player', sIdx, kIdx }));
+        s.skills.forEach((sk, kIdx) => {
+          if (typeof root.canRemoveSkillByEffect !== 'function' || root.canRemoveSkillByEffect(sk, false, owner, s, 'deck')) {
+            candidateSkills.push({ skId: sk, slotOwner: 'player', sIdx, kIdx, charName: root.cardsDatabase[s.character]?.nombre || 'Personaje' });
+          }
+        });
       }
     });
     playtestState.opponentSlots.forEach((s, sIdx) => {
       if (s && s.skills) {
-        s.skills.forEach((sk, kIdx) => candidateSkills.push({ skId: sk, slotOwner: 'opponent', sIdx, kIdx }));
+        s.skills.forEach((sk, kIdx) => {
+          if (typeof root.canRemoveSkillByEffect !== 'function' || root.canRemoveSkillByEffect(sk, true, owner, s, 'deck')) {
+            candidateSkills.push({ skId: sk, slotOwner: 'opponent', sIdx, kIdx, charName: root.cardsDatabase[s.character]?.nombre || 'Personaje' });
+          }
+        });
       }
     });
 
-    if (candidateSkills.length > 0) {
-      const chosen = (typeof onChosenTargetSkill === 'function') ? onChosenTargetSkill(candidateSkills) : candidateSkills[0];
+    const proceedShuffle = (chosen) => {
       const targetSlot = (chosen.slotOwner === 'player') ? playtestState.slots[chosen.sIdx] : playtestState.opponentSlots[chosen.sIdx];
       const targetDeck = (chosen.slotOwner === 'player') ? playtestState.deck : playtestState.opponentDeck;
 
       if (targetSlot && targetSlot.skills) {
-        const removedSk = targetSlot.skills.splice(chosen.kIdx, 1)[0];
-        targetDeck.push(removedSk);
-        if (typeof root.shuffleArray === 'function') root.shuffleArray(targetDeck);
-        if (typeof root.addLog === 'function') {
-          root.addLog(`[Caos carmesí] Barajaste la Skill portada <strong>${root.cardsDatabase[removedSk].nombre}</strong> al mazo de su dueño.`, 'var(--accent-purple)');
+        const kIndex = targetSlot.skills.indexOf(chosen.skId);
+        if (kIndex !== -1) {
+          const removedSk = targetSlot.skills.splice(kIndex, 1)[0];
+          targetDeck.push(removedSk);
+          if (typeof root.shuffleArray === 'function') root.shuffleArray(targetDeck);
+          if (typeof root.addLog === 'function') {
+            root.addLog(`[Caos carmesí] Barajaste la Skill portada <strong>${root.cardsDatabase[removedSk]?.nombre || removedSk}</strong> al mazo de su dueño.`, 'var(--accent-purple)');
+          }
         }
       }
+      step3Draw();
+    };
+
+    if (candidateSkills.length === 0) {
+      step3Draw();
+      return true;
     }
 
-    // 3. Robar 1 carta de tu deck
-    if (myDeck.length > 0) {
-      myHand.push(myDeck.shift());
-      if (typeof root.addLog === 'function') {
-        root.addLog(`[Caos carmesí] Robaste 1 carta de tu deck.`, 'var(--accent-purple)');
-      }
+    if (typeof onChosenTargetSkill === 'function') {
+      const chosen = onChosenTargetSkill(candidateSkills);
+      proceedShuffle(chosen || candidateSkills[0]);
+      return true;
     }
 
-    if (typeof root.updatePlaytestView === 'function') root.updatePlaytestView();
+    if (isPlayer && typeof root.openCardChooserModal === 'function') {
+      const chooserTargets = candidateSkills.map(c => ({
+        id: c.skId,
+        owner: c.slotOwner,
+        text: `"${root.cardsDatabase[c.skId]?.nombre || c.skId}" (de ${c.charName} - ${c.slotOwner === 'player' ? 'Tú' : 'Rival'})`
+      }));
+      root.openCardChooserModal(chooserTargets, "Caos carmesí: Selecciona 1 Skill portada para barajar a su mazo", (chosenIdx) => {
+        proceedShuffle(candidateSkills[chosenIdx]);
+      });
+      return true;
+    }
+
+    proceedShuffle(candidateSkills[0]);
     return true;
   }
 
@@ -655,25 +754,39 @@
     const targetName = carrierName.includes('Nara') ? 'Nobuko' : 'Nara';
 
     const candidates = myDeck.filter(id => root.cardsDatabase[id]?.tipo === 'Personaje' && root.cardsDatabase[id]?.nombre?.includes(targetName));
-    const chosenId = (typeof onChosenChar === 'function') ? onChosenChar(candidates) : candidates[0];
+    if (candidates.length === 0) return false;
 
-    const dIdx = myDeck.indexOf(chosenId);
-    if (dIdx !== -1) myDeck.splice(dIdx, 1);
+    const performDeploy = (chosenId) => {
+      const dIdx = myDeck.indexOf(chosenId);
+      if (dIdx !== -1) myDeck.splice(dIdx, 1);
 
-    const freeSlotIdx = mySlots.findIndex(s => s && !s.character);
-    if (freeSlotIdx !== -1) {
-      mySlots[freeSlotIdx].character = chosenId;
-      mySlots[freeSlotIdx].skills = [];
-      mySlots[freeSlotIdx].isRotated = false;
-      mySlots[freeSlotIdx].effectUsed = false;
-      mySlots[freeSlotIdx].playedFromHand = false;
+      const freeSlotIdx = mySlots.findIndex(s => s && !s.character);
+      if (freeSlotIdx !== -1) {
+        mySlots[freeSlotIdx].character = chosenId;
+        mySlots[freeSlotIdx].skills = [];
+        mySlots[freeSlotIdx].isRotated = false;
+        mySlots[freeSlotIdx].effectUsed = false;
+        mySlots[freeSlotIdx].playedFromHand = false;
+      }
+
+      if (typeof root.shuffleArray === 'function') root.shuffleArray(myDeck);
+      if (typeof root.addLog === 'function') {
+        root.addLog(`[Contratiempo] Jugaste a <strong>${root.cardsDatabase[chosenId].nombre}</strong> a tu campo desde tu deck (Slot ${freeSlotIdx + 1}).`, 'var(--accent-purple)');
+      }
+      if (typeof root.updatePlaytestView === 'function') root.updatePlaytestView();
+      return true;
+    };
+
+    if (typeof onChosenChar === 'function') {
+      return performDeploy(onChosenChar(candidates));
     }
-
-    if (typeof root.shuffleArray === 'function') root.shuffleArray(myDeck);
-    if (typeof root.addLog === 'function') {
-      root.addLog(`[Contratiempo] Jugaste a <strong>${root.cardsDatabase[chosenId].nombre}</strong> a tu campo desde tu deck (Slot ${freeSlotIdx + 1}).`, 'var(--accent-purple)');
+    if (!isPlayer || typeof root.openCardChooserModal !== 'function' || candidates.length === 1) {
+      return performDeploy(candidates[0]);
     }
-    if (typeof root.updatePlaytestView === 'function') root.updatePlaytestView();
+    const chooserTargets = candidates.map(id => ({ id, from: 'deck', owner: 'player' }));
+    root.openCardChooserModal(chooserTargets, `Contratiempo (SP330): Selecciona 1 Personaje ${targetName} para jugar desde tu deck`, (chosenIdx) => {
+      performDeploy(candidates[chosenIdx] || candidates[0]);
+    });
     return true;
   }
 

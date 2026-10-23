@@ -1,4 +1,4 @@
-// Variables de Estado de la Aplicación
+﻿// Variables de Estado de la Aplicación
 let allCards = [];
 let cardsDatabase = {};
 if (typeof window !== 'undefined') window.cardsDatabase = cardsDatabase;
@@ -6833,7 +6833,7 @@ function handleDropOnSlot(e, slotIndex) {
         }
       } else {
         if (card.clase === 'Avanzada') {
-          alert(`Los Personajes de Clase Avanzada no pueden invocarse en un slot vacío; deben evolucionar sobre un ${card.nombre} en campo.`);
+          alert(`Los Personajes de Clase Avanzada no pueden jugarse en un slot vacío; deben evolucionar sobre un ${card.nombre} en campo.`);
           return;
         }
         invokeCharacter(data.id, data.index, slotIndex);
@@ -6976,7 +6976,7 @@ function handleDropOnOpponentSlot(e, slotIndex) {
         }
       } else {
         if (card.clase === 'Avanzada') {
-          alert(`Los Personajes de Clase Avanzada no pueden invocarse en un slot vacío; deben evolucionar sobre un ${card.nombre} en campo.`);
+          alert(`Los Personajes de Clase Avanzada no pueden jugarse en un slot vacío; deben evolucionar sobre un ${card.nombre} en campo.`);
           return;
         }
         invokeOpponentCharacter(data.id, data.index, slotIndex, 'hand');
@@ -7482,13 +7482,13 @@ function showOpponentHandCardMenu(e, id, index) {
   const hasEvolutionSlot = evolutionSlots.length > 0;
   const canInvoke = isOpponentTurn && !isBlockedPlay && (isAvanzada ? hasEvolutionSlot : hasFreeSlot);
 
-  let invokeLabel = `Invocar a ${card.nombre}`;
+  let invokeLabel = `Jugar a ${card.nombre}`;
   if (!isOpponentTurn) {
-    invokeLabel = `⚠️ Invocar a ${card.nombre} (Solo en turno rival)`;
+    invokeLabel = `⚠️ Jugar a ${card.nombre} (Solo en turno rival)`;
   } else if (isAvanzada) {
     invokeLabel = hasEvolutionSlot ? `Evolucionar sobre ${card.nombre}` : `Evolucionar (Requiere a ${card.nombre} en campo)`;
   } else if (isBlockedPlay) {
-    invokeLabel = `Invocar a ${card.nombre} (Bloqueado este turno)`;
+    invokeLabel = `Jugar a ${card.nombre} (Bloqueado este turno)`;
   }
 
   const items = [
@@ -10209,6 +10209,26 @@ function showOpponentEquippedSkillMenu(e, slotIndex, skId, skIndex) {
     }
   }
 
+    // BBX-SP314 Encriptar rival
+  if (skId === 'BBX-SP314') {
+    const oppSlot = playtestState.opponentSlots[slotIndex];
+    const yaUsadoGlobal = (playtestState.opponentUsedGlobalEffects || []).includes("Encriptar") || (playtestState.opponentUsedGlobalEffects || []).includes("BBX-SP314");
+    const yaUsadoCard = (oppSlot.usedSkills || []).includes(skId);
+    const isCarrierChiako = oppSlot && oppSlot.character && cardsDatabase[oppSlot.character] && cardsDatabase[oppSlot.character].nombre.includes("Chiako");
+    const isChiakoSkill = id => cardsDatabase[id]?.tipo === 'Skill' && cardsDatabase[id]?.portador && cardsDatabase[id]?.portador.includes("Chiako");
+    const chiakoSkillsInDeck = (playtestState.opponentDeck || []).filter(isChiakoSkill);
+    const distinctNames = new Set(chiakoSkillsInDeck.map(id => cardsDatabase[id]?.nombre || id));
+
+    if (!yaUsadoGlobal && !yaUsadoCard && isCarrierChiako && distinctNames.size >= 2 && !isSkillEffectBlocked(skId, 'opponent', oppSlot)) {
+      items.push({
+        text: `✨ [RIVAL] Activar Encriptar`,
+        action: () => {
+          executeEncriptarSP314('opponent', slotIndex, skIndex);
+        }
+      });
+    }
+  }
+
   // BBX-SP337 Analizar datos rival
   if (skId === 'BBX-SP337') {
     const oppSlot = playtestState.opponentSlots[slotIndex];
@@ -12146,6 +12166,159 @@ function executeColapsarSistemaSP365(activatorOwner = 'player', slotIndex, skInd
   }
 }
 
+// Encriptar (BBX-SP314): "Puedes enviar 1 Skill propia de Chiako de tu deck al cementerio, entonces agrega a tu mano desde tu deck 1 Skill propia de Chiako de nombre diferente a la que enviaste al cementerio. Solo puedes usar este efecto de \"Encriptar\" una vez por turno."
+function executeEncriptarSP314(activatorOwner = 'player', slotIndex, skIndex, testOptions = {}, onDone = null) {
+  const isPlayer = activatorOwner === 'player';
+  const slots = isPlayer ? playtestState.slots : playtestState.opponentSlots;
+  const slot = slots ? slots[slotIndex] : null;
+  const deck = isPlayer ? playtestState.deck : playtestState.opponentDeck;
+  const hand = isPlayer ? playtestState.hand : playtestState.opponentHand;
+  const grave = isPlayer ? playtestState.grave : playtestState.opponentGrave;
+  const usedGlobal = isPlayer ? playtestState.usedGlobalEffects : playtestState.opponentUsedGlobalEffects;
+  const tag = isPlayer ? '[Efecto Encriptar BBX-SP314]' : '[Rival - Efecto Encriptar BBX-SP314]';
+
+  if (!slot || !slot.character || !slot.skills || !slot.skills.includes('BBX-SP314')) {
+    if (typeof onDone === 'function') onDone(false);
+    return;
+  }
+
+  // 1. Portador Chiako
+  const charCard = cardsDatabase[slot.character];
+  if (!charCard || !charCard.nombre || !charCard.nombre.includes("Chiako")) {
+    if (isPlayer && typeof alert === 'function') alert("Esta Skill solo puede activar su efecto si está portada por Chiako.");
+    if (typeof onDone === 'function') onDone(false);
+    return;
+  }
+
+  // 2. HOPT
+  if (usedGlobal.includes("Encriptar") || usedGlobal.includes("BBX-SP314") || (slot.usedSkills && slot.usedSkills.includes('BBX-SP314'))) {
+    if (isPlayer && typeof alert === 'function') alert('Solo puedes usar el efecto de "Encriptar" una vez por turno.');
+    if (typeof onDone === 'function') onDone(false);
+    return;
+  }
+
+  // 3. Bloqueo
+  if (typeof isSkillEffectBlocked === 'function' && isSkillEffectBlocked('BBX-SP314', activatorOwner, slot)) {
+    addLog(`${tag} El efecto de Encriptar está bloqueado.`, 'var(--text-muted)');
+    if (typeof onDone === 'function') onDone(false);
+    return;
+  }
+
+  // 4. Buscar Skills de Chiako en el deck
+  const isChiakoSkill = id => {
+    const c = cardsDatabase[id];
+    return c && c.tipo === 'Skill' && c.portador && c.portador.includes("Chiako");
+  };
+
+  const initialSkillsInDeck = (deck || []).filter(isChiakoSkill);
+  if (initialSkillsInDeck.length < 2) {
+    if (isPlayer && typeof alert === 'function') alert("Debes tener al menos 2 Skills de Chiako con nombres diferentes en tu deck.");
+    if (typeof onDone === 'function') onDone(false);
+    return;
+  }
+
+  const distinctNames = new Set(initialSkillsInDeck.map(id => cardsDatabase[id]?.nombre || id));
+  if (distinctNames.size < 2) {
+    if (isPlayer && typeof alert === 'function') alert("No hay al menos 2 Skills de Chiako con nombres diferentes en tu deck.");
+    if (typeof onDone === 'function') onDone(false);
+    return;
+  }
+
+  const markUsed = () => {
+    if (!usedGlobal.includes("Encriptar")) usedGlobal.push("Encriptar");
+    if (!usedGlobal.includes("BBX-SP314")) usedGlobal.push("BBX-SP314");
+    if (!slot.usedSkills) slot.usedSkills = [];
+    if (!slot.usedSkills.includes('BBX-SP314')) slot.usedSkills.push('BBX-SP314');
+    if (typeof skIndex === 'number' && skIndex >= 0) {
+      if (!slot.usedSkillIndexes) slot.usedSkillIndexes = [];
+      if (!slot.usedSkillIndexes.includes(skIndex)) slot.usedSkillIndexes.push(skIndex);
+    }
+  };
+
+  // Paso 2: agregar al deck 1 Skill propia de Chiako de nombre diferente
+  const proceedStep2 = (sentSkillId) => {
+    const sentName = cardsDatabase[sentSkillId]?.nombre || sentSkillId;
+    const remainingTargets = (deck || []).filter(id => isChiakoSkill(id) && (cardsDatabase[id]?.nombre !== sentName));
+
+    if (remainingTargets.length === 0) {
+      addLog(`${tag} No quedan Skills propias de Chiako con nombre diferente a "${sentName}" en el deck.`, 'var(--text-muted)');
+      if (typeof shuffleArray === 'function') shuffleArray(deck);
+      updatePlaytestView();
+      if (typeof onDone === 'function') onDone(true, { sentId: sentSkillId, addedId: null });
+      return;
+    }
+
+    const finalizeAdd = (addedSkillId) => {
+      const aIdx = deck.indexOf(addedSkillId);
+      if (aIdx !== -1) deck.splice(aIdx, 1);
+      hand.push(addedSkillId);
+      if (typeof shuffleArray === 'function') shuffleArray(deck);
+
+      const addedName = cardsDatabase[addedSkillId]?.nombre || addedSkillId;
+      addLog(`${tag} ${isPlayer ? 'Agregaste a tu mano' : 'El rival agregó a su mano'} a <strong>${addedName}</strong> desde su deck y barajó el mazo.`, 'var(--accent-purple)');
+
+      if (typeof checkAndTriggerInestabilidad === 'function') {
+        checkAndTriggerInestabilidad(activatorOwner);
+      }
+      updatePlaytestView();
+      if (typeof onDone === 'function') onDone(true, { sentId: sentSkillId, addedId: addedSkillId });
+    };
+
+    if (testOptions && testOptions.chosenSecondSkillId) {
+      finalizeAdd(remainingTargets.find(id => id === testOptions.chosenSecondSkillId) || remainingTargets[0]);
+    } else if (!isPlayer) {
+      finalizeAdd(remainingTargets[0]);
+    } else if (typeof openCardChooserModal === 'function') {
+      const chooserTargets2 = remainingTargets.map(id => ({ id, owner: activatorOwner, from: 'deck' }));
+      openCardChooserModal(chooserTargets2, `Encriptar: Selecciona 1 Skill de Chiako de nombre diferente a "${sentName}" para agregar a tu mano`, (chosen2Idx) => {
+        finalizeAdd(remainingTargets[chosen2Idx] || remainingTargets[0]);
+      });
+    } else {
+      finalizeAdd(remainingTargets[0]);
+    }
+  };
+
+  // Paso 1: Enviar 1 Skill de Chiako al cementerio
+  const executeSendStep1 = (chosenSkillId) => {
+    markUsed();
+    const dIdx = deck.indexOf(chosenSkillId);
+    if (dIdx !== -1) deck.splice(dIdx, 1);
+    grave.push(chosenSkillId);
+
+    const sentName = cardsDatabase[chosenSkillId]?.nombre || chosenSkillId;
+    addLog(`${tag} ${isPlayer ? 'Enviaste' : 'El rival envió'} <strong>${sentName}</strong> de su deck al cementerio.`, 'var(--accent-purple)');
+
+    if (typeof dispatchGraveTriggers === 'function') {
+      dispatchGraveTriggers(chosenSkillId, activatorOwner, { fromZone: 'deck', byEffect: true });
+    }
+    if (typeof checkAndTriggerRemembranza === 'function') {
+      checkAndTriggerRemembranza(chosenSkillId, activatorOwner);
+    }
+    if (typeof checkAndTriggerFulgorOfensivo === 'function') {
+      checkAndTriggerFulgorOfensivo(chosenSkillId);
+    }
+
+    proceedStep2(chosenSkillId);
+  };
+
+  if (testOptions && testOptions.chosenFirstSkillId) {
+    executeSendStep1(initialSkillsInDeck.find(id => id === testOptions.chosenFirstSkillId) || initialSkillsInDeck[0]);
+  } else if (!isPlayer) {
+    executeSendStep1(initialSkillsInDeck[0]);
+  } else if (typeof openCardChooserModal === 'function') {
+    const chooserTargets = initialSkillsInDeck.map(id => ({ id, owner: activatorOwner, from: 'deck' }));
+    openCardChooserModal(chooserTargets, "Encriptar: Selecciona 1 Skill propia de Chiako de tu deck para enviar al cementerio", (chosenIdx) => {
+      executeSendStep1(initialSkillsInDeck[chosenIdx] || initialSkillsInDeck[0]);
+    });
+  } else {
+    executeSendStep1(initialSkillsInDeck[0]);
+  }
+}
+
+if (typeof window !== 'undefined') {
+  window.executeEncriptarSP314 = executeEncriptarSP314;
+}
+
 function activateOpponentEspiralDelCaos(slotIndex, skIndex) {
   const oppSlot = playtestState.opponentSlots[slotIndex];
   if (!oppSlot || !oppSlot.skills) return;
@@ -12805,13 +12978,13 @@ function showHandCardMenu(e, cardId, index) {
     const isBlocked = typeof isCharacterPlayBlockedToField === 'function' && isCharacterPlayBlockedToField(cardId, 'player');
     const canInvoke = isPlayerTurn && !isBlocked && (isAvanzada ? hasEvolutionSlot : hasFreeSlot);
 
-    let btnText = 'Invocar';
+    let btnText = 'Jugar al campo';
     if (!isPlayerTurn) {
       btnText = `⚠️ Solo en tu turno (Turno Rival)`;
     } else if (isAvanzada) {
       btnText = hasEvolutionSlot ? `Evolucionar sobre ${card.nombre}` : `Evolucionar (Requiere a ${card.nombre} en campo)`;
     } else if (isBlocked) {
-      btnText = `Invocar (${card.nombre} no se puede jugar a tu campo este turno)`;
+      btnText = `Jugar al campo (${card.nombre} no se puede jugar a tu campo este turno)`;
     }
 
     items.push({
@@ -12819,7 +12992,7 @@ function showHandCardMenu(e, cardId, index) {
       disabled: !canInvoke,
       action: () => {
         if (!isPlayerTurn) {
-          alert("Solo puedes invocar o evolucionar Personajes durante tu turno.");
+          alert("Solo puedes jugar o evolucionar Personajes durante tu turno.");
           return;
         }
         if (isAvanzada) {
@@ -16353,8 +16526,8 @@ function showFieldCardMenu(e, slotIndex) {
     }
   }
 
-  // Helica BBX-SP135, Deida BBX-SP136, Haruka BBX-SP251, Nara BBX-SP252, Eishet BBX-SP283, Haruka BBX-SP345, Eishet BBX-SP348, Katherine BBX-SP350, Void-oh BBX-SP367, Helica BBX-SP165, BBX-SP099, BBX-SP193 y BBX-SP335: Efectos pasivos / de banca (sin activación manual en campo)
-  if (card.id === 'BBX-SP135' || card.id === 'BBX-SP136' || card.id === 'BBX-SP251' || card.id === 'BBX-SP252' || card.id === 'BBX-SP283' || card.id === 'BBX-SP345' || card.id === 'BBX-SP348' || card.id === 'BBX-SP350' || card.id === 'BBX-SP367' || card.id === 'BBX-SP165' || card.id === 'BBX-SP099' || card.id === 'BBX-SP193' || card.id === 'BBX-SP335') {
+  // Helica BBX-SP135, Deida BBX-SP136, Haruka BBX-SP251, Nara BBX-SP252, Eishet BBX-SP283, Lyna BBX-SP327, Haruka BBX-SP345, Eishet BBX-SP348, Katherine BBX-SP350, Void-oh BBX-SP367, Helica BBX-SP165, BBX-SP099, BBX-SP193 y BBX-SP335: Efectos pasivos / de banca (sin activación manual en campo)
+  if (card.id === 'BBX-SP135' || card.id === 'BBX-SP136' || card.id === 'BBX-SP251' || card.id === 'BBX-SP252' || card.id === 'BBX-SP283' || card.id === 'BBX-SP327' || card.id === 'BBX-SP345' || card.id === 'BBX-SP348' || card.id === 'BBX-SP350' || card.id === 'BBX-SP367' || card.id === 'BBX-SP165' || card.id === 'BBX-SP099' || card.id === 'BBX-SP193' || card.id === 'BBX-SP335') {
     canShowEffectOption = false;
   }
 
@@ -16411,9 +16584,9 @@ function showFieldCardMenu(e, slotIndex) {
     }
   }
 
-  // Tagero BBX-SP149: Requisito de 1 o más Skills y portar al menos 1 ¡Explosión trueno! (BBX-SP023)
+  // Tagero BBX-SP149: Requisito de 1 o más Skills y portar al menos 1 ¡Explosión trueno! (BBX-SP021)
   if (card.id === 'BBX-SP149') {
-    const explosionCount = (slot.skills || []).filter(id => id === 'BBX-SP023').length;
+    const explosionCount = (slot.skills || []).filter(id => id === 'BBX-SP021').length;
     const getEquippedSkills = () => {
       const list = [];
       playtestState.slots.forEach(s => {
@@ -17703,8 +17876,18 @@ function isAnheloGraveBlocked(owner = 'player') {
     : !!playtestState.opponentGraveEffectsBlockedThisTurn;
 }
 
+function isLynaSP327Active() {
+  if (typeof playtestState === 'undefined' || !playtestState) return false;
+  const pSlots = playtestState.slots || [];
+  const oSlots = playtestState.opponentSlots || [];
+  return pSlots.some(s => s && s.character === 'BBX-SP327') || oSlots.some(s => s && s.character === 'BBX-SP327');
+}
+
 function isCardGraveEffectBlocked(owner = 'player', cardId = null) {
   if (isAnheloGraveBlocked(owner)) return true;
+  if (cardId && cardsDatabase[cardId] && cardsDatabase[cardId].tipo === 'Personaje' && isLynaSP327Active()) {
+    return true;
+  }
   if (cardId && typeof window.RulesEngine !== 'undefined' && typeof window.RulesEngine.canActivateFromZone === 'function') {
     const check = window.RulesEngine.canActivateFromZone(cardId, 'grave', owner);
     if (!check.allowed) return true;
@@ -18683,6 +18866,21 @@ function showEquippedSkillMenu(e, slotIndex, skId, skIndex) {
       }
     }
 
+        // Si es Encriptar (BBX-SP314)
+    if (skId === 'BBX-SP314') {
+      const yaUsadoGlobal = (playtestState.usedGlobalEffects || []).includes("Encriptar") || (playtestState.usedGlobalEffects || []).includes("BBX-SP314");
+      const yaUsadoCard = (slot.usedSkills || []).includes(skId);
+      const yaUsadoIndex = (slot.usedSkillIndexes || []).includes(skIndex);
+      const isCarrierChiako = slot.character && cardsDatabase[slot.character] && cardsDatabase[slot.character].nombre.includes("Chiako");
+      const isChiakoSkill = id => cardsDatabase[id]?.tipo === 'Skill' && cardsDatabase[id]?.portador && cardsDatabase[id]?.portador.includes("Chiako");
+      const chiakoSkillsInDeck = (playtestState.deck || []).filter(isChiakoSkill);
+      const distinctNames = new Set(chiakoSkillsInDeck.map(id => cardsDatabase[id]?.nombre || id));
+
+      if (yaUsadoGlobal || yaUsadoCard || yaUsadoIndex || !isCarrierChiako || distinctNames.size < 2 || isSkillEffectBlocked(skId, 'player', slot)) {
+        canActivate = false;
+      }
+    }
+
     // Si es Analizar datos (BBX-SP337)
     if (skId === 'BBX-SP337') {
       const yaUsadoGlobal = (playtestState.usedGlobalEffects || []).includes("Analizar datos");
@@ -19325,7 +19523,7 @@ function showEquippedSkillMenu(e, slotIndex, skId, skIndex) {
 
 function invokeCharacter(cardId, handIndex, slotIndex) {
   if (playtestState.isOnlineMatch && playtestState.turnOwner !== 'player') {
-    alert("No es tu turno para invocar personajes.");
+    alert("No es tu turno para jugar Personajes al campo.");
     return false;
   }
   const invocadaDesdeMano = (handIndex !== undefined && handIndex !== -1);
@@ -19381,7 +19579,7 @@ function invokeCharacter(cardId, handIndex, slotIndex) {
   if (isEvolucion) {
     addLog(`¡Evolución! <strong>${card.nombre} (${card.evolucion})</strong> sobre el slot ${slotIndex + 1}. El personaje original <strong>${cardsDatabase[oldCharId].nombre}</strong> ahora se trata como una Habilidad equipada.`, 'var(--accent-cyan)');
   } else {
-    addLog(`Invocaste a <strong>${card.nombre}</strong> en slot ${slotIndex + 1}.`, 'var(--accent-blue)');
+    addLog(`Jugaste a <strong>${card.nombre}</strong> en slot ${slotIndex + 1}.`, 'var(--accent-blue)');
   }
   
   if (typeof window !== 'undefined' && window.AnimationEngine && window.AnimationEngine.SoundFX) {
@@ -19414,7 +19612,7 @@ function invokeCharacter(cardId, handIndex, slotIndex) {
   if (invocadaDesdeMano && hasOnSummonTrigger) {
     if (isCharacterEffectBlocked('player', slot)) {
       if (isRelajoActive() && (!slot.skills || slot.skills.length <= 2)) {
-        addLog(`[Efecto Relajo] El efecto de invocación de <strong>${card.nombre}</strong> no puede activarse (porta 2 o menos Skills).`, 'var(--text-muted)');
+        addLog(`[Efecto Relajo] El efecto al ser jugado al campo de <strong>${card.nombre}</strong> no puede activarse (porta 2 o menos Skills).`, 'var(--text-muted)');
       }
       return;
     }
@@ -19569,7 +19767,7 @@ function checkAndTriggerKatshiPlay(slotIndex) {
           if (idxInGrave !== -1) {
             const pulledId = playtestState.grave.splice(idxInGrave, 1)[0];
             slot.skills.push(pulledId);
-            addLog(`[Efecto Katshi] Activado tras ser invocada: Se equipó la Skill <strong>${cardsDatabase[pulledId].nombre}</strong> de tu cementerio.`, 'var(--accent-purple)');
+            addLog(`[Efecto Katshi] Activado al ser jugada al campo: Se equipó la Skill <strong>${cardsDatabase[pulledId].nombre}</strong> de tu cementerio.`, 'var(--accent-purple)');
             updatePlaytestView();
           }
         });
@@ -19613,7 +19811,7 @@ function checkAndTriggerRyuChanPlay(slotIndex = 0, owner = 'player', options = {
         opponentDrawCard('character');
       }
     }
-    addLog(`[Efecto Ryu-chan BBX-SP120] ${isPlayer ? 'Activaste' : 'El rival activó'} su efecto de invocación y robó ${toDraw} carta(s).`, 'var(--accent-purple)');
+    addLog(`[Efecto Ryu-chan BBX-SP120] ${isPlayer ? 'Activaste' : 'El rival activó'} su efecto al ser jugado al campo y robó ${toDraw} carta(s).`, 'var(--accent-purple)');
     updatePlaytestView();
     if (typeof onDone === 'function') onDone(true);
   };
@@ -20401,7 +20599,7 @@ function checkAndTriggerSophiaSP395Play(slotIndex, owner = 'player', testOptions
     return;
   }
 
-  // Regla clarificada: Debe haber como mínimo 1 slot libre disponible después de que Sophia fuera invocada
+  // Regla clarificada: Debe haber como mínimo 1 slot libre disponible después de que Sophia fuera jugada al campo
   const freeSlotIndices = slots
     .map((s, idx) => (!s.character ? idx : -1))
     .filter(idx => idx !== -1);
@@ -24276,20 +24474,37 @@ function checkAndTriggerColgante(skillId, owner = 'player', ctx = {}, testOption
       return;
     }
 
-    const chosenId = currentMarinas[0];
-    const idxInDeck = deck.indexOf(chosenId);
-    if (idxInDeck !== -1) deck.splice(idxInDeck, 1);
-    hand.push(chosenId);
-    if (typeof shuffleArray === 'function') shuffleArray(deck);
+    const deliverMarina = (chosenId) => {
+      const idxInDeck = deck.indexOf(chosenId);
+      if (idxInDeck !== -1) deck.splice(idxInDeck, 1);
+      hand.push(chosenId);
+      if (typeof shuffleArray === 'function') shuffleArray(deck);
 
-    if (typeof addLog === 'function') addLog(`${tag} Añadió a <strong>${cardsDatabase[chosenId]?.nombre || chosenId}</strong> a la mano desde su deck y barajó el mazo.`, 'var(--accent-purple)');
-    if (typeof checkAndTriggerInestabilidad === 'function') checkAndTriggerInestabilidad(owner);
-    if (typeof notifyCardAddedToHandFromDeck === 'function') notifyCardAddedToHandFromDeck(owner, chosenId, false);
-    if (typeof updatePlaytestView === 'function') updatePlaytestView();
-    if (onDone) onDone(true);
+      if (typeof addLog === 'function') addLog(`${tag} Añadió a <strong>${cardsDatabase[chosenId]?.nombre || chosenId}</strong> a la mano desde su deck y barajó el mazo.`, 'var(--accent-purple)');
+      if (typeof checkAndTriggerInestabilidad === 'function') checkAndTriggerInestabilidad(owner);
+      if (typeof notifyCardAddedToHandFromDeck === 'function') notifyCardAddedToHandFromDeck(owner, chosenId, false);
+      if (typeof updatePlaytestView === 'function') updatePlaytestView();
+      if (onDone) onDone(true);
+    };
+
+    if (testOptions && (testOptions.chosenMarinaId || testOptions.chosenMarinaIndex !== undefined)) {
+      let picked = testOptions.chosenMarinaId ? currentMarinas.find(id => id === testOptions.chosenMarinaId) : currentMarinas[testOptions.chosenMarinaIndex];
+      if (!picked) picked = currentMarinas[0];
+      deliverMarina(picked);
+      return;
+    }
+
+    if (!isPlayer || typeof openCardChooserModal !== 'function' || currentMarinas.length === 1) {
+      deliverMarina(currentMarinas[0]);
+    } else {
+      const chooserTargets = currentMarinas.map(id => ({ id, from: 'deck', owner: 'player' }));
+      openCardChooserModal(chooserTargets, "Colgante (SP143): Selecciona 1 Personaje Marina de tu deck para añadir a tu mano", (chosenIdx) => {
+        deliverMarina(currentMarinas[chosenIdx] || currentMarinas[0]);
+      });
+    }
   };
 
-  if (!isPlayer || (testOptions && testOptions.autoSelect !== false) || typeof showContextMenu !== 'function') {
+  if (!isPlayer || (testOptions && (testOptions.autoSelect !== false || testOptions.chosenMarinaId || testOptions.chosenMarinaIndex !== undefined)) || typeof showContextMenu !== 'function') {
     executeColgante();
     return;
   }
@@ -26223,6 +26438,12 @@ function activateSkillFieldEffect(slotIndex, skillId, skIndex) {
     ];
     const dummyEvent = { clientX: window.innerWidth / 2 - 100, clientY: window.innerHeight / 2 - 60 };
     showContextMenu(dummyEvent, declareOptions);
+    return;
+  }
+
+    // Encriptar BBX-SP314: Puedes enviar 1 Skill propia de Chiako de tu deck al cementerio, entonces agrega a tu mano desde tu deck 1 Skill propia de Chiako de nombre diferente a la que enviaste al cementerio. Solo puedes usar este efecto de "Encriptar" una vez por turno.
+  if (skillId === 'BBX-SP314') {
+    executeEncriptarSP314('player', slotIndex, skIndex);
     return;
   }
 
@@ -33447,24 +33668,26 @@ function sendFromDeckToGrave(cardId, reasonOwner = 'player') {
     }
   }
 
-  // 6. Si la carta es "Maniobra de fuego" (BBX-SP050), activar efecto Trigger (equipar a Roy en campo y moler 3)
+  // 6. Si la carta es "Maniobra de fuego" (BBX-SP050), activar efecto Trigger (portar 1 Skill propia de Roy desde cementerio a un Personaje Roy)
   if (cardId === 'BBX-SP050') {
-    const yaUsadoGlobal = playtestState.usedGlobalEffects.includes('Maniobra de fuego');
+    const isRoyChar = id => cardsDatabase[id]?.tipo === 'Personaje' && cardsDatabase[id]?.nombre?.includes('Roy');
+    const isRoySkill = id => cardsDatabase[id]?.tipo === 'Skill' && cardsDatabase[id]?.portador && cardsDatabase[id].portador.includes('Roy') && (!isSkillBannedFromEquip(id));
+
     const eligibleSlots = [];
     playtestState.slots.forEach((s, idx) => {
-      if (s.character && cardsDatabase[s.character].nombre === 'Roy') {
-        eligibleSlots.push({ slotIndex: idx, characterId: s.character });
+      if (s.character && isRoyChar(s.character)) {
+        eligibleSlots.push({ slotIndex: idx, characterId: s.character, name: cardsDatabase[s.character].nombre });
       }
     });
 
-    if (yaUsadoGlobal) {
-      addLog(`[Efecto Maniobra de fuego] Ya se usó el efecto de esta Skill este turno (Hard Once Per Turn).`, 'var(--text-muted)');
-    } else if (isConmocionActive()) {
-      addLog(`[Efecto Maniobra de fuego] No se puede activar: Conmoción prohíbe enviar 3 o más cartas desde el deck al cementerio.`, 'var(--text-muted)');
-    } else if (!canEquipFromZone('grave')) {
-      addLog(`[Efecto Maniobra de fuego] No se puede equipar a Roy desde el cementerio debido al efecto continuo de Katherine (SP085).`, 'var(--text-muted)');
+    const roySkillsInGrave = playtestState.grave.filter(isRoySkill);
+
+    if (!canEquipFromZone('grave')) {
+      addLog(`[Efecto Maniobra de fuego] No se puede portar desde el cementerio debido a una restricción activa (ej. Katherine SP085).`, 'var(--text-muted)');
     } else if (eligibleSlots.length === 0) {
-      addLog(`[Efecto Maniobra de fuego] No controlas personajes de Roy en tu campo para equipar esta Skill.`, 'var(--text-muted)');
+      addLog(`[Efecto Maniobra de fuego] No controlas ningún Personaje Roy en tu campo para portar una Skill.`, 'var(--text-muted)');
+    } else if (roySkillsInGrave.length === 0) {
+      addLog(`[Efecto Maniobra de fuego] No hay Skills propias de Roy en tu cementerio para portar.`, 'var(--text-muted)');
     } else {
       const items = [
         {
@@ -33474,43 +33697,48 @@ function sendFromDeckToGrave(cardId, reasonOwner = 'player') {
           }
         },
         {
-          text: "✊ Activar Maniobra de fuego (Equipar a Roy y descartar 3)",
+          text: "✊ Activar Maniobra de fuego (Portar 1 Skill propia de Roy desde tu cementerio)",
           action: () => {
-            const doEquipAndMill = (targetSlotIdx) => {
-              const targetSlot = playtestState.slots[targetSlotIdx];
-              const idxInGrave = playtestState.grave.indexOf('BBX-SP050');
-              if (idxInGrave !== -1) {
-                playtestState.grave.splice(idxInGrave, 1);
+            const proceedEquip = (targetSlotIdx) => {
+              const freshSkills = playtestState.grave.filter(isRoySkill);
+              if (freshSkills.length === 0) {
+                addLog(`[Efecto Maniobra de fuego] Ya no quedan Skills propias de Roy en tu cementerio.`, 'var(--text-muted)');
+                updatePlaytestView();
+                return;
               }
-              targetSlot.skills.push('BBX-SP050');
-              addLog(`[Efecto Maniobra de fuego] Se equipó a <strong>${cardsDatabase[targetSlot.character].nombre}</strong> desde el cementerio.`, 'var(--accent-purple)');
 
-              const discardedNames = [];
-              for (let i = 0; i < 3; i++) {
-                if (playtestState.deck.length > 0) {
-                  const topId = playtestState.deck[0];
-                  sendFromDeckToGrave(topId);
-                  discardedNames.push(cardsDatabase[topId].nombre);
+              const applySkillToRoy = (chosenSkillId) => {
+                const gIdx = playtestState.grave.lastIndexOf(chosenSkillId);
+                if (gIdx !== -1) {
+                  playtestState.grave.splice(gIdx, 1);
                 }
-              }
+                const targetSlot = playtestState.slots[targetSlotIdx];
+                targetSlot.skills.push(chosenSkillId);
+                addLog(`[Efecto Maniobra de fuego] Portaste <strong>${cardsDatabase[chosenSkillId].nombre}</strong> desde tu cementerio a <strong>${cardsDatabase[targetSlot.character].nombre}</strong> (Slot ${targetSlotIdx + 1}).`, 'var(--accent-purple)');
+                if (typeof checkAndTriggerInestabilidad === 'function') checkAndTriggerInestabilidad('player');
+                updatePlaytestView();
+              };
 
-              if (discardedNames.length > 0) {
-                addLog(`[Efecto Maniobra de fuego] Se descartaron las primeras ${discardedNames.length} cartas del tope de tu deck: ${discardedNames.join(', ')}.`, 'var(--accent-purple)');
+              if (freshSkills.length === 1) {
+                applySkillToRoy(freshSkills[0]);
               } else {
-                addLog(`[Efecto Maniobra de fuego] No quedaban cartas en tu deck para descartar.`, 'var(--text-muted)');
+                const chooserTargets = freshSkills.map(id => ({ id, owner: 'player' }));
+                openCardChooserModal(chooserTargets, "Maniobra de fuego: Selecciona 1 Skill propia de Roy en tu cementerio para portar", (chosenSkillIdx) => {
+                  applySkillToRoy(freshSkills[chosenSkillIdx]);
+                });
               }
-
-              playtestState.usedGlobalEffects.push('Maniobra de fuego');
-              updatePlaytestView();
             };
 
             if (eligibleSlots.length === 1) {
-              doEquipAndMill(eligibleSlots[0].slotIndex);
+              proceedEquip(eligibleSlots[0].slotIndex);
             } else {
-              const royCharacterIds = eligibleSlots.map(item => item.characterId);
-              openCardChooserModal(royCharacterIds, "Efecto de Maniobra de fuego: Selecciona al Roy al que equiparás la Skill", (chosenRoyIdx) => {
-                const targetSlotIdx = eligibleSlots[chosenRoyIdx].slotIndex;
-                doEquipAndMill(targetSlotIdx);
+              const royChooserTargets = eligibleSlots.map(item => ({
+                id: item.characterId,
+                owner: 'player',
+                text: `${item.name} (Slot ${item.slotIndex + 1})`
+              }));
+              openCardChooserModal(royChooserTargets, "Maniobra de fuego: Selecciona al Personaje Roy al que portarás la Skill", (chosenRoyIdx) => {
+                proceedEquip(eligibleSlots[chosenRoyIdx].slotIndex);
               });
             }
           }
@@ -34301,6 +34529,12 @@ function activateEffect(slotIndex) {
   // Haruka BBX-SP251: Efecto continuo pasivo
   if (card.id === 'BBX-SP251') {
     alert("El efecto de Haruka (BBX-SP251) es continuo y pasivo: Ningún jugador puede recuperar cartas del cementerio a su mano.");
+    return;
+  }
+
+  // Lyna BBX-SP327: Efecto continuo pasivo
+  if (card.id === 'BBX-SP327') {
+    alert("El efecto de Lyna (BBX-SP327) es continuo y pasivo: Ningún jugador puede usar efectos de Personajes en su cementerio.");
     return;
   }
 
@@ -35736,7 +35970,7 @@ function activateEffect(slotIndex) {
       return;
     }
 
-    const explosionCount = slot.skills.filter(id => id === 'BBX-SP023').length;
+    const explosionCount = slot.skills.filter(id => id === 'BBX-SP021').length;
     if (explosionCount === 0) {
       alert("Tagero no porta ninguna copia de '¡Explosión trueno!'.");
       return;
@@ -44133,20 +44367,24 @@ function checkAndTriggerEspiral(cardId, owner = 'player', ctx = {}, testOptions 
     return;
   }
 
-  const executeAutoDestruction = () => {
+  const executeDestruction = (selectedTargets) => {
     let destroyed = 0;
-    const oppSkills = initialSkills.filter(item => item.owner === oppOwner);
-    const toDestroy = oppSkills.slice(0, katherineCount);
-    toDestroy.forEach(target => {
-      const s = oppSlots[target.slotIdx];
-      const skIndex = s.skills.indexOf(target.id);
-      if (skIndex !== -1) {
-        const lostId = s.skills.splice(skIndex, 1)[0];
-        (isPlayer ? playtestState.opponentGrave : playtestState.grave).push(lostId);
-        if (typeof addLog === 'function') addLog(`${tag} Destruyó la Skill <strong>${cardsDatabase[lostId]?.nombre || lostId}</strong>.`, 'var(--accent-purple)');
-        if (typeof onEquippedSkillSentToGraveByEffect === 'function') onEquippedSkillSentToGraveByEffect(lostId, oppOwner, owner);
-        if (typeof dispatchGraveTriggers === 'function') dispatchGraveTriggers(lostId, oppOwner, { isEquipped: true, fromZone: 'field' });
-        destroyed++;
+    selectedTargets.forEach(target => {
+      const isTargetPlayer = target.owner === 'player';
+      const slotList = isTargetPlayer ? playtestState.slots : playtestState.opponentSlots;
+      const targetGrave = isTargetPlayer ? playtestState.grave : playtestState.opponentGrave;
+      const targetCardOwner = isTargetPlayer ? 'player' : 'opponent';
+      const s = slotList[target.slotIdx];
+      if (s && s.skills) {
+        const skIndex = s.skills.indexOf(target.id);
+        if (skIndex !== -1) {
+          const lostId = s.skills.splice(skIndex, 1)[0];
+          targetGrave.push(lostId);
+          if (typeof addLog === 'function') addLog(`${tag} Envió al cementerio la Skill portada <strong>${cardsDatabase[lostId]?.nombre || lostId}</strong> (de ${target.charName} - ${isTargetPlayer ? 'Tú' : 'Rival'}).`, 'var(--accent-purple)');
+          if (typeof onEquippedSkillSentToGraveByEffect === 'function') onEquippedSkillSentToGraveByEffect(lostId, targetCardOwner, owner);
+          if (typeof dispatchGraveTriggers === 'function') dispatchGraveTriggers(lostId, targetCardOwner, { isEquipped: true, fromZone: 'field' });
+          destroyed++;
+        }
       }
     });
     if (typeof notifySkillsRemovedByEffect === 'function') notifySkillsRemovedByEffect(destroyed, 'grave', owner);
@@ -44154,15 +44392,48 @@ function checkAndTriggerEspiral(cardId, owner = 'player', ctx = {}, testOptions 
     if (onDone) onDone(true);
   };
 
-  if (!isPlayer || (testOptions && testOptions.autoSelect !== false) || typeof openCardChooserModal !== 'function') {
-    executeAutoDestruction();
+  const getAutoTargets = () => {
+    const oppSkills = initialSkills.filter(item => item.owner === oppOwner);
+    return oppSkills.slice(0, katherineCount);
+  };
+
+  if (!isPlayer || (testOptions && testOptions.autoSelect !== false) || typeof openUpToMultiCardChooserModal !== 'function') {
+    if (testOptions && Array.isArray(testOptions.selectedTargetIndices)) {
+      const selected = testOptions.selectedTargetIndices.map(idx => initialSkills[idx]).filter(Boolean);
+      executeDestruction(selected.slice(0, katherineCount));
+    } else {
+      executeDestruction(getAutoTargets());
+    }
     return;
   }
 
   const items = [
     {
-      text: `✊ Activar ¡Espiral de fuego! (Destruir hasta ${katherineCount} Skills equipadas)`,
-      action: () => executeAutoDestruction()
+      text: `✊ Activar ¡Espiral de fuego! (Enviar hasta ${katherineCount} Skill(s) al cementerio)`,
+      action: () => {
+        const currentSkills = getEquippedSkills();
+        if (currentSkills.length === 0) {
+          if (typeof addLog === 'function') addLog(`${tag} Ya no hay Skills equipadas en el campo.`, 'var(--text-muted)');
+          if (typeof updatePlaytestView === 'function') updatePlaytestView();
+          if (onDone) onDone(false);
+          return;
+        }
+        const maxQty = Math.min(katherineCount, currentSkills.length);
+        const chooserTargets = currentSkills.map(item => ({
+          id: item.id,
+          owner: item.owner,
+          text: `"${cardsDatabase[item.id]?.nombre || item.id}" (de ${item.charName} - ${item.owner === 'player' ? 'Tú' : 'Rival'})`
+        }));
+        openUpToMultiCardChooserModal(chooserTargets, `¡Espiral de fuego!: Selecciona hasta ${maxQty} Skill(s) portadas para enviar al cementerio`, maxQty, (chosenIndices) => {
+          if (!chosenIndices || chosenIndices.length === 0) {
+            if (typeof updatePlaytestView === 'function') updatePlaytestView();
+            if (onDone) onDone(false);
+            return;
+          }
+          const selected = chosenIndices.map(idx => currentSkills[idx]);
+          executeDestruction(selected);
+        });
+      }
     },
     {
       text: "💥 No activar ¡Espiral de fuego!",
@@ -55332,7 +55603,7 @@ function showPlayerDeckContextMenu(e) {
       }
     },
     {
-      text: "✨ [Nobuko BBX-SP416] Invocar en tu Campo (Slot 0)",
+      text: "✨ [Nobuko BBX-SP416] Jugar en tu Campo (Slot 0)",
       action: () => {
         playtestState.slots[0].character = 'BBX-SP416';
         playtestState.slots[0].skills = [];
@@ -55342,7 +55613,7 @@ function showPlayerDeckContextMenu(e) {
       }
     },
     {
-      text: "✨ [Nobuko BBX-SP416 Rival] Invocar en Campo Rival (Slot 0)",
+      text: "✨ [Nobuko BBX-SP416 Rival] Jugar en Campo Rival (Slot 0)",
       action: () => {
         playtestState.opponentSlots[0].character = 'BBX-SP416';
         playtestState.opponentSlots[0].skills = [];
@@ -55400,7 +55671,7 @@ function showPlayerDeckContextMenu(e) {
       }
     },
     {
-      text: "🗡️ [Lyna BBX-SP403] Invocar en tu Campo (Slot 0)",
+      text: "🗡️ [Lyna BBX-SP403] Jugar en tu Campo (Slot 0)",
       action: () => {
         playtestState.slots[0].character = 'BBX-SP403';
         playtestState.slots[0].skills = [];
@@ -55409,7 +55680,7 @@ function showPlayerDeckContextMenu(e) {
       }
     },
     {
-      text: "🗡️ [Lyna BBX-SP403 Rival] Invocar en Campo Rival (Slot 0)",
+      text: "🗡️ [Lyna BBX-SP403 Rival] Jugar en Campo Rival (Slot 0)",
       action: () => {
         playtestState.opponentSlots[0].character = 'BBX-SP403';
         playtestState.opponentSlots[0].skills = [];
@@ -55579,6 +55850,39 @@ function showPlayerDeckContextMenu(e) {
       action: () => {
         playtestState.opponentHand.push('BBX-SP429');
         addLog(`[Playtest] Se añadió <strong>Ciclón de palma (BBX-SP429)</strong> a la mano rival.`, 'var(--accent-purple)');
+        updatePlaytestView();
+      }
+    },
+    {
+      text: "🗡️ [Lyna BBX-SP327] Jugar en tu Campo (Slot 0)",
+      action: () => {
+        playtestState.slots[0].character = 'BBX-SP327';
+        playtestState.slots[0].skills = [];
+        addLog(`[Playtest] Se jugó a <strong>Lyna (BBX-SP327)</strong> en tu Campo (Slot 0). Efecto continuo: ningún jugador puede usar efectos de Personajes en cementerio.`, 'var(--accent-cyan)');
+        updatePlaytestView();
+      }
+    },
+    {
+      text: "🗡️ [Lyna BBX-SP327 Rival] Jugar en Campo Rival (Slot 0)",
+      action: () => {
+        playtestState.opponentSlots[0].character = 'BBX-SP327';
+        playtestState.opponentSlots[0].skills = [];
+        addLog(`[Playtest] Se jugó a <strong>Lyna (BBX-SP327)</strong> en Campo Rival (Slot 0). Efecto continuo: ningún jugador puede usar efectos de Personajes en cementerio.`, 'var(--accent-cyan)');
+        updatePlaytestView();
+      }
+    },
+    {
+      text: "✨ [Por allá... BBX-SP325] Enviar Skill portada al Cementerio (Trigger)",
+      action: () => {
+        if (!playtestState.slots[0].skills) playtestState.slots[0].skills = [];
+        playtestState.slots[0].skills.push('BBX-SP325');
+        const skIdx = playtestState.slots[0].skills.indexOf('BBX-SP325');
+        playtestState.slots[0].skills.splice(skIdx, 1);
+        playtestState.grave.push('BBX-SP325');
+        addLog(`[Playtest] Se envió <strong>Por allá... (BBX-SP325)</strong> portada al cementerio por efecto.`, 'var(--accent-purple)');
+        if (typeof dispatchGraveTriggers === 'function') {
+          dispatchGraveTriggers('BBX-SP325', 'player', { isEquipped: true, fromZone: 'field' });
+        }
         updatePlaytestView();
       }
     }
@@ -59302,30 +59606,121 @@ function checkAndTriggerFuegoDigital(cardId, fromZone = 'deck', owner = 'player'
   const grave = (isPlayer ? playtestState.grave : playtestState.opponentGrave) || [];
   const bench = isPlayer ? (playtestState.bench = playtestState.bench || []) : (playtestState.opponentBench = playtestState.opponentBench || []);
 
-  // Buscar Personaje Katherine en deck o grave
   const isKatherineChar = (id) => cardsDatabase[id]?.tipo === 'Personaje' && cardsDatabase[id]?.nombre?.includes("Katherine");
-  let foundId = null;
-  const dIdx = deck.findIndex(isKatherineChar);
-  if (dIdx !== -1) {
-    foundId = deck.splice(dIdx, 1)[0];
-    if (typeof shuffleArray === 'function') shuffleArray(deck);
-  } else {
-    const gIdx = grave.findIndex(isKatherineChar);
-    if (gIdx !== -1) {
-      foundId = grave.splice(gIdx, 1)[0];
+
+  // Recopilar candidatos de deck y cementerio
+  const candidates = [];
+  deck.forEach((id, idx) => {
+    if (isKatherineChar(id)) {
+      candidates.push({
+        id: id,
+        source: 'deck',
+        deckIndex: idx,
+        name: cardsDatabase[id]?.nombre || id,
+        text: `${cardsDatabase[id]?.nombre || id} (Deck)`
+      });
     }
+  });
+
+  grave.forEach((id, idx) => {
+    if (isKatherineChar(id)) {
+      candidates.push({
+        id: id,
+        source: 'grave',
+        graveIndex: idx,
+        name: cardsDatabase[id]?.nombre || id,
+        text: `${cardsDatabase[id]?.nombre || id} (Cementerio)`
+      });
+    }
+  });
+
+  if (candidates.length === 0) {
+    if (typeof addLog === 'function') addLog(tag + ' No hay Personajes Katherine en el deck ni cementerio para poner en banca.', 'var(--text-muted)');
+    if (onDone) onDone(false);
+    return false;
   }
 
-  if (foundId) {
-    bench.push({ id: foundId, effectUsed: false });
-    if (typeof addLog === 'function') addLog(tag + ' Colocó a <strong>' + (cardsDatabase[foundId]?.nombre || foundId) + '</strong> en su banca directamente.', 'var(--accent-cyan)');
-    if (typeof updatePlaytestView === 'function') updatePlaytestView();
-    if (onDone) onDone(true);
+  const resolvePutToBench = (chosenCandidate) => {
+    if (!chosenCandidate) {
+      if (onDone) onDone(false);
+      return false;
+    }
+    let foundId = null;
+    if (chosenCandidate.source === 'deck') {
+      const dIdx = deck.indexOf(chosenCandidate.id);
+      if (dIdx !== -1) {
+        foundId = deck.splice(dIdx, 1)[0];
+        if (typeof shuffleArray === 'function') shuffleArray(deck);
+      }
+    } else {
+      const gIdx = grave.indexOf(chosenCandidate.id);
+      if (gIdx !== -1) {
+        foundId = grave.splice(gIdx, 1)[0];
+      }
+    }
+
+    if (foundId) {
+      bench.push({ id: foundId, effectUsed: false });
+      const sourceLabel = chosenCandidate.source === 'deck' ? 'desde su deck' : 'desde su cementerio';
+      if (typeof addLog === 'function') {
+        addLog(tag + ' Colocó a <strong>' + (cardsDatabase[foundId]?.nombre || foundId) + '</strong> en su banca ' + sourceLabel + ' directamente.', 'var(--accent-cyan)');
+      }
+      if (typeof updatePlaytestView === 'function') updatePlaytestView();
+      if (onDone) onDone(true, foundId);
+      return true;
+    }
+    if (onDone) onDone(false);
+    return false;
+  };
+
+  // Modo automatizado (tests / auto)
+  if (testOptions && (testOptions.chosenCandidateIndex !== undefined || testOptions.chosenCardId !== undefined || testOptions.activate === true)) {
+    let picked = null;
+    if (testOptions.chosenCardId) {
+      picked = candidates.find(c => c.id === testOptions.chosenCardId);
+    } else if (typeof testOptions.chosenCandidateIndex === 'number') {
+      picked = candidates[testOptions.chosenCandidateIndex];
+    }
+    if (!picked) picked = candidates[0];
+    return resolvePutToBench(picked);
+  }
+
+  if (testOptions && testOptions.skipActivation) {
+    if (typeof addLog === 'function') addLog(tag + ' ' + (isPlayer ? 'Decidiste' : 'El rival decidió') + ' no activar el efecto de Fuego digital.', 'var(--text-muted)');
+    if (onDone) onDone(false);
+    return false;
+  }
+
+  // Modo Rival (IA): prioriza deck para adelgazar mazo
+  if (!isPlayer) {
+    const picked = candidates.find(c => c.source === 'deck') || candidates[0];
+    return resolvePutToBench(picked);
+  }
+
+  // Modo Jugador: Modal interactivo
+  if (typeof openCardChooserModal === 'function') {
+    const chooserTargets = candidates.map(c => ({
+      id: c.id,
+      text: c.text,
+      from: c.source
+    }));
+    openCardChooserModal(
+      chooserTargets,
+      "Fuego digital (SP329): Selecciona 1 Personaje Katherine de tu deck o cementerio para poner en tu banca",
+      (chosenIdx) => {
+        const picked = candidates[chosenIdx] || candidates[0];
+        resolvePutToBench(picked);
+      },
+      () => {
+        if (typeof addLog === 'function') addLog(tag + ' Decidiste no activar el efecto de Fuego digital.', 'var(--text-muted)');
+        if (typeof updatePlaytestView === 'function') updatePlaytestView();
+        if (onDone) onDone(false);
+      }
+    );
     return true;
+  } else {
+    return resolvePutToBench(candidates[0]);
   }
-
-  if (onDone) onDone(false);
-  return false;
 }
 
 function checkAndTriggerTajoVentada(cardId, owner = 'player', ctx = {}, testOptions = {}, onDone = null) {
@@ -59412,28 +59807,134 @@ function checkAndTriggerPorAlla(cardId, owner = 'player', ctx = {}, testOptions 
   const grave = (isPlayer ? playtestState.grave : playtestState.opponentGrave) || [];
   const hand = (isPlayer ? playtestState.hand : playtestState.opponentHand) || [];
 
-  const isLynaChar = (id) => cardsDatabase[id]?.tipo === 'Personaje' && cardsDatabase[id]?.nombre?.includes("Lyna");
-  let foundId = null;
-  const dIdx = deck.findIndex(isLynaChar);
-  if (dIdx !== -1) {
-    foundId = deck.splice(dIdx, 1)[0];
-    if (typeof shuffleArray === 'function') shuffleArray(deck);
-  } else {
-    const gIdx = grave.findIndex(isLynaChar);
-    if (gIdx !== -1) foundId = grave.splice(gIdx, 1)[0];
+  const isLynaChar = (id) => cardsDatabase[id]?.tipo === 'Personaje' && (cardsDatabase[id]?.nombre?.includes("Lyna") || id === 'BBX-SP425');
+
+  // Recopilar candidatos de deck y cementerio
+  const candidates = [];
+  deck.forEach((id, idx) => {
+    if (isLynaChar(id)) {
+      candidates.push({
+        id: id,
+        source: 'deck',
+        deckIndex: idx,
+        name: cardsDatabase[id]?.nombre || id,
+        text: `${cardsDatabase[id]?.nombre || id} (Deck)`
+      });
+    }
+  });
+
+  const canRecoverFromGrave = !(typeof isGraveToHandBlocked === 'function' && isGraveToHandBlocked());
+  if (canRecoverFromGrave) {
+    grave.forEach((id, idx) => {
+      if (isLynaChar(id)) {
+        candidates.push({
+          id: id,
+          source: 'grave',
+          graveIndex: idx,
+          name: cardsDatabase[id]?.nombre || id,
+          text: `${cardsDatabase[id]?.nombre || id} (Cementerio)`
+        });
+      }
+    });
   }
 
-  if (foundId) {
-    hand.push(foundId);
+  if (candidates.length === 0) {
+    if (typeof addLog === 'function') addLog(tag + ' No hay Personajes Lyna en el deck ni cementerio para agregar.', 'var(--text-muted)');
+    if (onDone) onDone(false);
+    return false;
+  }
+
+  const resolveAddLyna = (chosenCandidate) => {
+    if (!chosenCandidate) {
+      if (onDone) onDone(false);
+      return false;
+    }
+
+    let addedId = null;
+    if (chosenCandidate.source === 'deck') {
+      const idx = deck.indexOf(chosenCandidate.id);
+      if (idx !== -1) {
+        addedId = deck.splice(idx, 1)[0];
+        if (typeof shuffleArray === 'function') shuffleArray(deck);
+      }
+    } else {
+      const idx = grave.indexOf(chosenCandidate.id);
+      if (idx !== -1) {
+        addedId = grave.splice(idx, 1)[0];
+      }
+    }
+
+    if (!addedId) {
+      if (onDone) onDone(false);
+      return false;
+    }
+
+    hand.push(addedId);
     usedGlobals.push("Por allá...");
-    if (typeof addLog === 'function') addLog(tag + ' Añadió a <strong>' + (cardsDatabase[foundId]?.nombre || foundId) + '</strong> a la mano.', 'var(--accent-cyan)');
+
+    const sourceLabel = chosenCandidate.source === 'deck' ? 'su deck' : 'su cementerio';
+    if (typeof addLog === 'function') {
+      addLog(tag + ' Agregó a <strong>' + (cardsDatabase[addedId]?.nombre || addedId) + '</strong> desde ' + sourceLabel + ' a su mano.', 'var(--accent-cyan)');
+    }
+
+    if (chosenCandidate.source === 'deck' && typeof notifyCardAddedToHandFromDeck === 'function') {
+      notifyCardAddedToHandFromDeck(addedId, owner, { isDraw: false, reason: 'Por allá...' });
+    }
+
     if (typeof updatePlaytestView === 'function') updatePlaytestView();
-    if (onDone) onDone(true);
+    if (onDone) onDone(true, addedId);
     return true;
+  };
+
+  // Modo automatizado (tests)
+  if (testOptions && (testOptions.chosenCandidateIndex !== undefined || testOptions.chosenCardId !== undefined || testOptions.activate === true)) {
+    let picked = null;
+    if (testOptions.chosenCardId) {
+      picked = candidates.find(c => c.id === testOptions.chosenCardId);
+    } else if (typeof testOptions.chosenCandidateIndex === 'number') {
+      picked = candidates[testOptions.chosenCandidateIndex];
+    }
+    if (!picked) picked = candidates[0];
+    return resolveAddLyna(picked);
   }
 
-  if (onDone) onDone(false);
-  return false;
+  if (testOptions && testOptions.skipActivation) {
+    if (typeof addLog === 'function') addLog(tag + ' ' + (isPlayer ? 'Decidiste' : 'El rival decidió') + ' no activar el efecto de Por allá...', 'var(--text-muted)');
+    if (onDone) onDone(false);
+    return false;
+  }
+
+  // Rival (IA)
+  if (!isPlayer) {
+    const picked = candidates.find(c => c.source === 'deck') || candidates[0];
+    return resolveAddLyna(picked);
+  }
+
+  // Jugador interactivo
+  if (typeof openCardChooserModal === 'function') {
+    const chooserTargets = candidates.map(c => ({
+      id: c.id,
+      text: c.text,
+      from: c.source
+    }));
+
+    openCardChooserModal(
+      chooserTargets,
+      "Por allá... (SP325): Selecciona 1 Personaje Lyna de tu deck o cementerio para agregar a tu mano",
+      (chosenIdx) => {
+        const picked = candidates[chosenIdx] || candidates[0];
+        resolveAddLyna(picked);
+      },
+      () => {
+        if (typeof addLog === 'function') addLog(tag + ' Decidiste no activar el efecto de Por allá...', 'var(--text-muted)');
+        if (typeof updatePlaytestView === 'function') updatePlaytestView();
+        if (onDone) onDone(false);
+      }
+    );
+    return true;
+  } else {
+    return resolveAddLyna(candidates[0]);
+  }
 }
 
 if (typeof window !== 'undefined') {
@@ -59460,6 +59961,7 @@ if (typeof window !== 'undefined') {
   window.canActivateDualidadSP428 = canActivateDualidadSP428;
   window.executeDualidadSP428Activation = executeDualidadSP428Activation;
   window.notifyCharacterPlayedDirectlyFromDeck = notifyCharacterPlayedDirectlyFromDeck;
+  window.isLynaSP327Active = isLynaSP327Active;
   window.canActivateCiclonDePalmaSP429 = canActivateCiclonDePalmaSP429;
   window.executeCiclonDePalmaSP429Activation = executeCiclonDePalmaSP429Activation;
   window.checkAndTriggerCiclonDePalmaSP429 = checkAndTriggerCiclonDePalmaSP429;

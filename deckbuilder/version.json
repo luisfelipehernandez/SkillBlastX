@@ -1,9 +1,9 @@
 {
-  "version": "1.2.3",
-  "version_code": 16,
-  "release_date": "2026-10-21",
+  "version": "1.2.4",
+  "version_code": 17,
+  "release_date": "2026-10-23",
   "name": "Skill Blast X",
-  "description": "Showcase visual de activación en el centro de la pantalla para efectos y reacciones de la IA (incluyendo Resistir BBX-SP060) y ajuste del ritmo de juego para visualización y comprensión óptima de las jugadas.",
+  "description": "Auditoría integral del 100% de las 429 cartas. Corrección de efectos de búsqueda interactiva (modales para Colgante, ¡Espiral de fuego!, Encantamiento, Caos carmesí, Maniobra de fuego y Encriptar), corrección de ID en Tagero y suite automatizada de pruebas.",
   "repo_url": "https://github.com/luisfelipehernandez/SkillBlastX",
   "raw_base_url": "https://raw.githubusercontent.com/luisfelipehernandez/SkillBlastX/main/"
 }
