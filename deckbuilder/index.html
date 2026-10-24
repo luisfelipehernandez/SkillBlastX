@@ -50,7 +50,7 @@
           <button class="menu-card-btn menu-card-duel" onclick="openDuelSetupModal()">
             <div class="menu-card-icon">⚔️</div>
             <div class="menu-card-body">
-              <span class="menu-card-title">DUELO (VS IA)</span>
+              <span class="menu-card-title">BATALLA (VS IA)</span>
             </div>
             <div class="menu-card-arrow">➔</div>
           </button>
@@ -58,7 +58,7 @@
           <button class="menu-card-btn menu-card-online" onclick="openMultiplayerModal()">
             <div class="menu-card-icon">🌐</div>
             <div class="menu-card-body">
-              <span class="menu-card-title">DUELO ONLINE (1V1)</span>
+              <span class="menu-card-title">BATALLA ONLINE (1V1)</span>
             </div>
             <div class="menu-card-arrow">➔</div>
           </button>
@@ -239,9 +239,9 @@
           <!-- Botones de Acción Superior -->
           <div class="sidebar-top-actions">
             <button class="btn-sidebar-action btn-sidebar-exit" onclick="showScreen('main-menu')" title="Volver al Menú Principal">🚪 Salir</button>
-            <button class="btn-sidebar-action btn-sidebar-surrender" id="btn-sidebar-surrender" onclick="surrenderMatch()" title="Rendirse del Duelo">🏳️ Rendirse</button>
-            <button class="btn-sidebar-action btn-sidebar-reset" onclick="restartPlaytest()" title="Reiniciar el Duelo">🔄 Reiniciar</button>
-            <button class="btn-sidebar-action btn-sidebar-options" onclick="openDuelSetupModal()" title="Configuración de Duelo">⚙ Opciones</button>
+            <button class="btn-sidebar-action btn-sidebar-surrender" id="btn-sidebar-surrender" onclick="surrenderMatch()" title="Rendirse de la Batalla">🏳️ Rendirse</button>
+            <button class="btn-sidebar-action btn-sidebar-reset" onclick="restartPlaytest()" title="Reiniciar la Batalla">🔄 Reiniciar</button>
+            <button class="btn-sidebar-action btn-sidebar-options" onclick="openDuelSetupModal()" title="Configuración de Batalla">⚙ Opciones</button>
           </div>
 
           <!-- Previsualización Grande de Carta -->
@@ -253,7 +253,7 @@
           <!-- Pestañas Skill Blast X: Información / Registro -->
           <div class="sidebar-tabs">
             <button id="sidebar-tab-card" class="sidebar-tab-btn active" onclick="switchSidebarTab('card')">Información</button>
-            <button id="sidebar-tab-log" class="sidebar-tab-btn" onclick="switchSidebarTab('log')">Registro de Duelo</button>
+            <button id="sidebar-tab-log" class="sidebar-tab-btn" onclick="switchSidebarTab('log')">Registro de Batalla</button>
           </div>
 
           <!-- Pestaña 1: Información de Carta -->
@@ -462,7 +462,7 @@
   <div id="duel-setup-modal" class="modal-overlay hidden">
     <div class="modal-content glass-panel" style="max-width: 620px;">
       <div class="modal-header">
-        <h3 style="display: flex; align-items: center; gap: 8px;">⚔️ Configuración de Duelo vs IA</h3>
+        <h3 style="display: flex; align-items: center; gap: 8px;">⚔️ Configuración de Batalla vs IA</h3>
         <button class="modal-close" onclick="closeDuelSetupModal()">×</button>
       </div>
       <div class="modal-body" style="display: flex; flex-direction: column; gap: 18px; padding: 20px;">
@@ -496,7 +496,7 @@
 
         <!-- Quién empieza -->
         <div class="setup-group">
-          <label style="font-weight: 700; color: var(--text-bright);">QUIÉN COMIENZA EL DUELO:</label>
+          <label style="font-weight: 700; color: var(--text-bright);">QUIÉN COMIENZA LA BATALLA:</label>
           <div style="display: flex; gap: 10px; margin-top: 6px;">
             <label class="radio-option" style="flex: 1; background: rgba(0,0,0,0.3); padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-glass); cursor: pointer; display: flex; align-items: center; gap: 8px;">
               <input type="radio" name="duel-first-player" value="dice" checked> 🎲 Lanzar Dado (Oficial)
@@ -514,7 +514,7 @@
         <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 10px;">
           <button class="btn btn-secondary" onclick="closeDuelSetupModal()">Cancelar</button>
           <button id="btn-start-duel" class="btn btn-primary" onclick="confirmAndLaunchDuel()" style="padding: 10px 24px; font-size: 1rem; font-weight: 800;">
-            ⚔️ ¡INICIAR DUELO!
+            ⚔️ ¡INICIAR BATALLA!
           </button>
         </div>
 
@@ -545,7 +545,7 @@
     <div class="modal-content glass-panel" style="max-width: 640px;">
       <div class="modal-header">
         <div style="display: flex; gap: 12px; align-items: center;">
-          <h3 style="display: flex; align-items: center; gap: 8px;">🌐 Duelo Online (1v1 P2P)</h3>
+          <h3 style="display: flex; align-items: center; gap: 8px;">🌐 Batalla Online (1v1 P2P)</h3>
         </div>
         <button class="modal-close" onclick="closeMultiplayerModal()">×</button>
       </div>
@@ -560,7 +560,7 @@
         <!-- Selección de Mazo Propio Compartida -->
         <div class="setup-group">
           <label style="font-weight: 700; color: var(--accent-cyan); display: flex; justify-content: space-between; align-items: center;">
-            <span>TU MAZO PARA EL DUELO:</span>
+            <span>TU MAZO PARA LA BATALLA:</span>
             <span id="mp-player-deck-status" style="font-size: 0.8rem; font-weight: 600;">Cargando...</span>
           </label>
           <div style="display: flex; gap: 8px; margin-top: 6px;">
@@ -648,7 +648,7 @@
         <!-- Pestaña Reglas -->
         <div id="rules-content" style="display: block; line-height: 1.6;">
           <h3 style="color: var(--accent-cyan); margin-bottom: 8px;">🎯 Objetivo y Condiciones de Victoria</h3>
-          <p>Derrotar a <strong>3 Personajes</strong> del adversario para ganar el duelo (o la partida en formato Bo3).</p>
+          <p>Derrotar a <strong>3 Personajes</strong> del adversario para ganar la batalla (o la partida en formato Bo3).</p>
           
           <h3 style="color: var(--accent-cyan); margin-top: 16px; margin-bottom: 8px;">📦 Construcción de Mazos (Deckbuilding)</h3>
           <ul style="margin-left: 20px;">

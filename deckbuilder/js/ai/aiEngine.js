@@ -53,7 +53,7 @@
       if (typeof playtestState === 'undefined' || !playtestState) return false;
       if (playtestState.matchEnded) {
         if (typeof root.addLog === 'function') {
-          root.addLog(`🏁 [Fin de Partida] El duelo ha concluido. La IA no realiza acciones.`, 'var(--accent-purple)');
+          root.addLog(`🏁 [Fin de Partida] La batalla ha concluido. La IA no realiza acciones.`, 'var(--accent-purple)');
         }
         return false;
       }
@@ -679,7 +679,7 @@
       await waitForPendingModalsAndMenus();
 
       if (playtestState.matchEnded) {
-        log(`🏁 [Fin de Partida] El duelo ha finalizado.`, 'var(--accent-cyan)');
+        log(`🏁 [Fin de Partida] La batalla ha finalizado.`, 'var(--accent-cyan)');
         return true;
       }
 
