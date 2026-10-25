@@ -6606,11 +6606,34 @@ function updatePlaytestView() {
       
       const skillsContainer = document.createElement('div');
       skillsContainer.className = 'slot-skills';
+      const skillsCount = slotData.skills.length;
+
+      // Badge contador elegante de Skills portadas en la esquina superior
+      if (skillsCount > 0) {
+        const badge = document.createElement('div');
+        badge.className = 'slot-skills-badge';
+        badge.innerHTML = `🛡️ ${skillsCount}`;
+        badge.title = `${skillsCount} Skill${skillsCount > 1 ? 's' : ''} portada${skillsCount > 1 ? 's' : ''}`;
+        cardEl.appendChild(badge);
+      }
+
+      // Solapamiento dinámico inteligente para que NUNCA se achiquen
+      let overlapMargin = 0;
+      if (skillsCount === 2) overlapMargin = -16;
+      else if (skillsCount === 3) overlapMargin = -20;
+      else if (skillsCount >= 4) overlapMargin = -24;
+
       slotData.skills.forEach((skId, skIndex) => {
         const skCard = cardsDatabase[skId];
         const skEl = document.createElement('div');
         skEl.className = 'equipped-skill';
         skEl.id = `equipped-skill-${i}-${skIndex}`;
+        skEl.dataset.cardId = skId;
+        skEl.dataset.skillIndex = skIndex;
+        if (skIndex > 0) {
+          skEl.style.marginLeft = `${overlapMargin}px`;
+        }
+        skEl.style.zIndex = skIndex + 1;
         skEl.innerHTML = `<img src="/imagenes/${skCard.imagen}" alt="${skCard.nombre}">`;
         attachCardHover(skEl, skId);
         
@@ -6687,11 +6710,33 @@ function updatePlaytestView() {
       
       const skillsContainer = document.createElement('div');
       skillsContainer.className = 'slot-skills';
+      const oppSkillsCount = slotData.skills.length;
+
+      // Badge contador elegante de Skills portadas por el rival
+      if (oppSkillsCount > 0) {
+        const badge = document.createElement('div');
+        badge.className = 'slot-skills-badge opponent-badge';
+        badge.innerHTML = `🛡️ ${oppSkillsCount}`;
+        badge.title = `${oppSkillsCount} Skill${oppSkillsCount > 1 ? 's' : ''} portada${oppSkillsCount > 1 ? 's' : ''}`;
+        cardEl.appendChild(badge);
+      }
+
+      let oppOverlapMargin = 0;
+      if (oppSkillsCount === 2) oppOverlapMargin = -16;
+      else if (oppSkillsCount === 3) oppOverlapMargin = -20;
+      else if (oppSkillsCount >= 4) oppOverlapMargin = -24;
+
       slotData.skills.forEach((skId, skIndex) => {
         const skCard = cardsDatabase[skId];
         const skEl = document.createElement('div');
         skEl.className = 'equipped-skill';
         skEl.id = `opp-equipped-skill-${i}-${skIndex}`;
+        skEl.dataset.cardId = skId;
+        skEl.dataset.skillIndex = skIndex;
+        if (skIndex > 0) {
+          skEl.style.marginLeft = `${oppOverlapMargin}px`;
+        }
+        skEl.style.zIndex = skIndex + 1;
         skEl.innerHTML = `<img src="/imagenes/${skCard.imagen}" alt="${skCard.nombre}">`;
         attachCardHover(skEl, skId);
         
@@ -17797,10 +17842,11 @@ if (typeof global !== 'undefined') global.SKILLS_WITHOUT_FIELD_ACTIVATION = SKIL
         disabled: !isPlayerTurn,
         action: () => {
           if (!isPlayerTurn) return;
+          const skEl = document.getElementById(`equipped-skill-${slotIndex}-${skIndex}`);
           const cardEl = document.getElementById(`field-card-${slotIndex}`);
-          runActivationAnimation(cardEl, () => {
+          runActivationAnimation(skEl || cardEl, () => {
             activateSkillFieldEffect(slotIndex, skillId, skIndex);
-          });
+          }, skillId);
         }
       });
     });
@@ -19461,7 +19507,7 @@ function showEquippedSkillMenu(e, slotIndex, skId, skIndex) {
             const skEl = document.getElementById(`equipped-skill-${slotIndex}-${skIndex}`);
             runActivationAnimation(skEl, () => {
               activateSkillFieldEffect(slotIndex, skId, skIndex);
-            });
+            }, skId);
           }
         });
       }

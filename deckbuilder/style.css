@@ -752,44 +752,7 @@ body {
   text-transform: uppercase;
 }
 
-/* Zonas de Equipamiento de Skills en Campo */
-.slot-skills {
-  display: flex;
-  gap: 4px;
-  position: absolute;
-  bottom: -10px;
-  width: 100%;
-  justify-content: center;
-  z-index: 25;
-}
-
-.equipped-skill {
-  width: 36px;
-  aspect-ratio: 675/975;
-  border-radius: 4px;
-  border: 1px solid var(--border-glass);
-  overflow: hidden;
-  cursor: pointer !important;
-  box-shadow: 0 3px 10px rgba(0,0,0,0.8);
-  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
-  user-select: none;
-}
-
-.equipped-skill:hover {
-  transform: translateY(-4px) scale(1.15) !important;
-  z-index: 100 !important;
-  border-color: var(--accent-cyan) !important;
-  box-shadow: 0 4px 15px rgba(0, 242, 254, 0.5) !important;
-}
-
-.equipped-skill img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  pointer-events: none !important;
-  user-select: none !important;
-  -webkit-user-drag: none !important;
-}
+/* (Skills styles consolidados en seccion superior) */
 
 .equipped-skill.used {
   filter: grayscale(0.65) brightness(0.55);
@@ -1793,32 +1756,83 @@ body {
 
 /* Zonas de Equipamiento de Skills en Campo */
 .slot-skills {
-  display: flex;
-  gap: 4px;
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
   position: absolute;
-  bottom: -10px;
-  width: 100%;
+  bottom: -18px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: max-content !important;
+  max-width: 140px;
   justify-content: center;
-  z-index: 25;
+  align-items: flex-end;
+  z-index: 30;
+  pointer-events: none;
 }
 
-.equipped-skill {
-  width: 36px;
-  aspect-ratio: 675/975;
-  border-radius: 4px;
-  border: 1px solid var(--border-glass);
-  overflow: hidden;
-  cursor: pointer !important;
-  box-shadow: 0 3px 10px rgba(0,0,0,0.8);
-  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+/* Badge contador elegante de Skills portadas en la esquina superior */
+.slot-skills-badge {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  background: rgba(10, 15, 28, 0.95);
+  border: 1.5px solid var(--accent-cyan);
+  color: var(--accent-cyan);
+  font-size: 0.68rem;
+  font-weight: 800;
+  padding: 1px 7px;
+  border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.85), 0 0 8px rgba(0, 242, 254, 0.4);
+  pointer-events: none;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  letter-spacing: 0.5px;
   user-select: none;
 }
 
+.slot-skills-badge.opponent-badge {
+  border-color: var(--accent-purple);
+  color: var(--accent-purple);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.85), 0 0 8px rgba(180, 80, 255, 0.4);
+}
+
+.equipped-skill {
+  width: 42px !important;
+  height: 60px !important;
+  aspect-ratio: 675/975;
+  flex-shrink: 0 !important;
+  border-radius: 5px;
+  border: 1.5px solid rgba(0, 242, 254, 0.5);
+  overflow: hidden;
+  cursor: pointer !important;
+  pointer-events: auto !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.9);
+  transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1), border-color 0.15s ease, box-shadow 0.18s ease, z-index 0.1s ease;
+  user-select: none;
+  background: #0d1424;
+  position: relative;
+}
+
+/* Hover cinematográfico: Se eleva, se amplía y se coloca al frente sin taparse */
 .equipped-skill:hover {
-  transform: translateY(-4px) scale(1.15) !important;
-  z-index: 100 !important;
-  border-color: var(--accent-cyan) !important;
-  box-shadow: 0 4px 15px rgba(0, 242, 254, 0.5) !important;
+  transform: translateY(-22px) scale(1.45) !important;
+  z-index: 999 !important;
+  border-color: #00f2fe !important;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.95), 0 0 16px rgba(0, 242, 254, 0.85) !important;
+}
+
+.equipped-skill.used {
+  filter: grayscale(0.7) brightness(0.5) !important;
+  opacity: 0.7 !important;
+  border-color: rgba(255, 255, 255, 0.3) !important;
+}
+
+.equipped-skill.used:hover {
+  filter: grayscale(0.2) brightness(0.85) !important;
+  opacity: 1 !important;
 }
 
 .equipped-skill img {
@@ -1828,6 +1842,17 @@ body {
   pointer-events: none !important;
   user-select: none !important;
   -webkit-user-drag: none !important;
+}
+
+/* Si la carta rota por ataque, mantener las skills y el badge orientados */
+.in-game-card.rotated .slot-skills {
+  transform: translateX(-50%) rotate(-90deg);
+  transform-origin: center center;
+}
+
+.in-game-card.rotated .slot-skills-badge {
+  transform: rotate(-90deg);
+  transform-origin: center center;
 }
 
 /* Soporte de filas del campo */
