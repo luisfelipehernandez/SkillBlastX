@@ -75,7 +75,7 @@ const MultiplayerEngine = (() => {
   async function createRoom() {
     localDeck = await getSelectedMultiplayerDeck();
     if (!localDeck || !localDeck.main || localDeck.main.length !== 35) {
-      alert("⚠️ Tu mazo debe tener exactamente 35 cartas para jugar una batalla oficial.");
+      alert("⚠️ Tu mazo debe tener exactamente 35 cartas para jugar una partida oficial.");
       return;
     }
 
@@ -177,7 +177,7 @@ const MultiplayerEngine = (() => {
 
     localDeck = await getSelectedMultiplayerDeck();
     if (!localDeck || !localDeck.main || localDeck.main.length !== 35) {
-      alert("⚠️ Tu mazo debe tener exactamente 35 cartas para jugar una batalla oficial.");
+      alert("⚠️ Tu mazo debe tener exactamente 35 cartas para jugar una partida oficial.");
       return;
     }
 
@@ -458,12 +458,12 @@ const MultiplayerEngine = (() => {
             adjustBo3Score('victories', 1);
           }
           if (typeof addLog === 'function') {
-            addLog("🏳️ Tu rival se ha rendido de la batalla. ¡Has ganado la partida!", 'var(--accent-cyan)');
+            addLog("🏳️ Tu rival se ha rendido de la partida. ¡Has ganado la partida!", 'var(--accent-cyan)');
           }
           if (typeof showMatchEndModal === 'function') {
-            showMatchEndModal(true, "¡VICTORIA!", "Tu rival se ha rendido de la batalla.");
+            showMatchEndModal(true, "¡VICTORIA!", "Tu rival se ha rendido de la partida.");
           } else {
-            alert("¡Tu rival se ha rendido! Has ganado la batalla.");
+            alert("¡Tu rival se ha rendido! Has ganado la partida.");
             if (typeof showScreen === 'function') {
               showScreen('main-menu');
             }
@@ -614,7 +614,7 @@ const MultiplayerEngine = (() => {
     if (!localStarterChosen || !oppStarterChosen) return;
 
     if (typeof addLog === 'function') {
-      addLog(`[Inicio de Batalla] Ambos jugadores han colocado su Personaje Inicial boca abajo en el campo.`, 'var(--accent-cyan)');
+      addLog(`[Inicio de Partida] Ambos jugadores han colocado su Personaje Inicial boca abajo en el campo.`, 'var(--accent-cyan)');
     }
     if (typeof updatePlaytestView === 'function') updatePlaytestView();
 
@@ -784,7 +784,7 @@ const MultiplayerEngine = (() => {
     if (typeof addLog === 'function') {
       addLog(`Robaste <strong>${myHandCount} cartas</strong> de mano inicial.`);
       addLog(`Tu rival robó <strong>${oppHandCount} cartas</strong> de mano inicial.`);
-      addLog(`⚔️ ¡Comienza la Batalla Online! ${pendingWeStartFirst ? 'Tú comienzas el Turno 1' : 'Tu rival comienza el Turno 1'}.`, 'var(--accent-cyan)');
+      addLog(`⚔️ ¡Comienza la Partida Online! ${pendingWeStartFirst ? 'Tú comienzas el Turno 1' : 'Tu rival comienza el Turno 1'}.`, 'var(--accent-cyan)');
     }
 
     if (typeof window !== 'undefined' && window.AnimationEngine && typeof window.AnimationEngine.showPhaseBanner === 'function') {
@@ -1017,7 +1017,7 @@ const MultiplayerEngine = (() => {
       '[Rival]',
       '[Turno ',
       'Has colocado tu Personaje Inicial',
-      '[Inicio de Batalla]',
+      '[Inicio de Partida]',
       '[Lanzamiento de Moneda]',
       '👑',
       '[Orden de Turno]',

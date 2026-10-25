@@ -347,7 +347,7 @@ function onDuelOppDeckChange() {
 
 function openDuelSetupModal() {
   if (typeof playtestState !== 'undefined' && playtestState.isOnlineMatch && typeof MultiplayerEngine !== 'undefined' && MultiplayerEngine.isConnected()) {
-    alert("La configuración de Batalla Rápida / Sandbox no está disponible durante una partida Multijugador Online activa.");
+    alert("La configuración de Partida Rápida / Sandbox no está disponible durante una partida Multijugador Online activa.");
     return;
   }
   populateDuelDecks();
@@ -474,7 +474,7 @@ async function confirmAndLaunchDuel() {
   // Validación oficial de 35 cartas
   if (!currentDeck || !currentDeck.main || currentDeck.main.length !== 35) {
     const count = currentDeck && currentDeck.main ? currentDeck.main.length : 0;
-    const continuar = confirm(`Tu mazo tiene ${count} cartas en lugar de las 35 obligatorias.\n¿Deseas iniciar la batalla de todos modos para pruebas?`);
+    const continuar = confirm(`Tu mazo tiene ${count} cartas en lugar de las 35 obligatorias.\n¿Deseas iniciar la partida de todos modos para pruebas?`);
     if (!continuar) return;
   }
 
@@ -550,7 +550,7 @@ async function confirmAndLaunchDuel() {
   playtestState.cannotEquipSkillNameThisTurn = null;
 
   if (typeof addLog === 'function') {
-    addLog(`⚔️ ¡Comienza la Batalla! Mazo cargado con ${currentDeck.main.length} cartas.`, 'var(--accent-cyan)');
+    addLog(`⚔️ ¡Comienza la Partida! Mazo cargado con ${currentDeck.main.length} cartas.`, 'var(--accent-cyan)');
   }
   if (typeof updatePlaytestView === 'function') updatePlaytestView();
 }
@@ -1524,7 +1524,7 @@ if (typeof global !== 'undefined') global.attachGraveyardInterceptors = attachGr
 // Iniciar/Reiniciar Playtest
 function restartPlaytest() {
   if (typeof playtestState !== 'undefined' && playtestState.isOnlineMatch && typeof MultiplayerEngine !== 'undefined' && MultiplayerEngine.isConnected()) {
-    alert("No puedes reiniciar unilateralmente una Batalla Online P2P en curso. Si deseas terminar la partida, usa el botón Salir.");
+    alert("No puedes reiniciar unilateralmente una Partida Online P2P en curso. Si deseas terminar la partida, usa el botón Salir.");
     return;
   }
   playtestState.matchEnded = false;
@@ -1616,7 +1616,7 @@ function restartPlaytest() {
   if (oldBar) oldBar.remove();
 
   document.getElementById('playtest-log').innerHTML = '<div style="color: var(--text-muted);">Mesa inicializada.</div>';
-  addLog("Configurando batalla...", 'var(--accent-cyan)');
+  addLog("Configurando partida...", 'var(--accent-cyan)');
 
   // Redefinir .push de cementerios para interceptar efectos disparados al caer al cementerio
   attachGraveyardInterceptors();
@@ -1788,7 +1788,7 @@ function startMatchSequence(chosenPlayerStarterId, testOptions = {}, onDone = nu
   const starterModal = (typeof document !== 'undefined') ? document.getElementById('starter-modal') : null;
   if (starterModal) starterModal.classList.add('hidden');
 
-  addLog(`[Inicio de Batalla] Ambos jugadores han colocado su Personaje Inicial boca abajo en el campo.`, 'var(--accent-cyan)');
+  addLog(`[Inicio de Partida] Ambos jugadores han colocado su Personaje Inicial boca abajo en el campo.`, 'var(--accent-cyan)');
   if (typeof updatePlaytestView === 'function') updatePlaytestView();
 
   // 3. Lanzar la moneda compartida para determinar quién elige orden de turno
@@ -1977,7 +1977,7 @@ function startMatchSequence(chosenPlayerStarterId, testOptions = {}, onDone = nu
       }
 
       if (typeof updatePlaytestView === 'function') updatePlaytestView();
-      addLog(`⚔️ ¡Comienza la batalla! Turno 1 de: <strong>${playtestState.turnOwner === 'player' ? 'Jugador' : 'Oponente'}</strong>.`, 'var(--accent-cyan)');
+      addLog(`⚔️ ¡Comienza la partida! Turno 1 de: <strong>${playtestState.turnOwner === 'player' ? 'Jugador' : 'Oponente'}</strong>.`, 'var(--accent-cyan)');
 
       // Si es duelo contra la IA y comienza el Oponente, ejecutar su turno automáticamente
       if (playtestState.isDuelVsAI && playtestState.turnOwner === 'opponent') {
@@ -2480,7 +2480,7 @@ function toggleTurnOwner(isOnlineEndTurn = false) {
     return;
   }
   if (playtestState.isOnlineMatch && !isOnlineEndTurn) {
-    alert("En batallas online, el turno finaliza únicamente usando el botón 'TERMINAR TURNO'.");
+    alert("En partidas online, el turno finaliza únicamente usando el botón 'TERMINAR TURNO'.");
     return;
   }
   playtestState.turnTransitionInProgress = true;
@@ -3438,7 +3438,7 @@ function toggleTurnOwner(isOnlineEndTurn = false) {
           if (typeof adjustBo3Score === 'function') {
             adjustBo3Score('defeats', 1);
           }
-          showMatchEndModal(false, "DERROTA", "Terminaste tu turno sin Personajes en tu campo y no te quedan Personajes básicos en tu deck para colocar en la banca.\n(Los Personajes Avanzados no pueden enviarse a la banca por esta regla).\n¡Has perdido la batalla!");
+          showMatchEndModal(false, "DERROTA", "Terminaste tu turno sin Personajes en tu campo y no te quedan Personajes básicos en tu deck para colocar en la banca.\n(Los Personajes Avanzados no pueden enviarse a la banca por esta regla).\n¡Has perdido la partida!");
           updatePlaytestView();
           return;
         }
@@ -3471,7 +3471,7 @@ function toggleTurnOwner(isOnlineEndTurn = false) {
           if (typeof adjustBo3Score === 'function') {
             adjustBo3Score('victories', 1);
           }
-          showMatchEndModal(true, "¡VICTORIA!", "El oponente terminó su turno sin Personajes en su campo y no le quedan Personajes básicos en su deck para colocar en la banca.\n¡Has ganado la batalla!");
+          showMatchEndModal(true, "¡VICTORIA!", "El oponente terminó su turno sin Personajes en su campo y no le quedan Personajes básicos en su deck para colocar en la banca.\n¡Has ganado la partida!");
           updatePlaytestView();
           return;
         }
@@ -6972,7 +6972,7 @@ function handleDropOnGrave(e) {
     addLog(`Descartaste <strong>${cardsDatabase[cardId].nombre}</strong> de la Banca.`);
   } else if (data.source.startsWith('slot-')) {
     if (playtestState.isOnlineMatch) {
-      alert("En Batallas Online no puedes enviar cartas del campo al cementerio manualmente.");
+      alert("En Partidas Online no puedes enviar cartas del campo al cementerio manualmente.");
       return;
     }
     destroySlot(parseInt(data.source.split('-')[1]));
@@ -7159,7 +7159,7 @@ function handleDropOnOpponentGrave(e) {
     addLog(`[RIVAL] Descartó <strong>${cardsDatabase[cardId].nombre}</strong> de la Banca.`, 'var(--accent-purple)');
   } else if (data.source.startsWith('opp-slot-')) {
     if (playtestState.isOnlineMatch) {
-      alert("En Batallas Online no puedes enviar cartas del campo al cementerio manualmente.");
+      alert("En Partidas Online no puedes enviar cartas del campo al cementerio manualmente.");
       return;
     }
     const slotIdx = parseInt(data.source.split('-')[2]);
@@ -23816,7 +23816,7 @@ function checkMatchEndCondition() {
     if (typeof adjustBo3Score === 'function') {
       adjustBo3Score('victories', 1);
     }
-    showMatchEndModal(true, "¡VICTORIA!", `La banca del rival ha acumulado 3 personajes derrotados (${oppBenchLen}/3).\n¡Has ganado la batalla!`);
+    showMatchEndModal(true, "¡VICTORIA!", `La banca del rival ha acumulado 3 personajes derrotados (${oppBenchLen}/3).\n¡Has ganado la partida!`);
     updatePlaytestView();
     return { ended: true, winner: 'player' };
   }
@@ -23827,7 +23827,7 @@ function checkMatchEndCondition() {
     if (typeof adjustBo3Score === 'function') {
       adjustBo3Score('defeats', 1);
     }
-    showMatchEndModal(false, "DERROTA", `Tu banca ha acumulado 3 personajes derrotados (${playerBenchLen}/3).\n¡Has perdido la batalla!`);
+    showMatchEndModal(false, "DERROTA", `Tu banca ha acumulado 3 personajes derrotados (${playerBenchLen}/3).\n¡Has perdido la partida!`);
     updatePlaytestView();
     return { ended: true, winner: 'opponent' };
   }
@@ -23892,7 +23892,7 @@ function surrenderMatch() {
   }
 
   playtestState.matchEnded = true;
-  addLog("🏳️ Te has rendido de la batalla.", 'var(--accent-danger)');
+  addLog("🏳️ Te has rendido de la partida.", 'var(--accent-danger)');
   if (typeof adjustBo3Score === 'function') {
     adjustBo3Score('defeats', 1);
   }
@@ -39563,7 +39563,7 @@ function adjustBo3Score(type, amount) {
   document.getElementById('bo3-score-victories').textContent = bo3Score.victories;
   document.getElementById('bo3-score-defeats').textContent = bo3Score.defeats;
   
-  addLog(`Marcador actualizado: Batallas Ganadas ${bo3Score.victories} - ${bo3Score.defeats} Perdidas.`);
+  addLog(`Marcador actualizado: Partidas Ganadas ${bo3Score.victories} - ${bo3Score.defeats} Perdidas.`);
   
   if (bo3Score.victories === 2) {
     addLog(`🏆 ¡Victoria en la ronda! Ganaste el Match (2 - ${bo3Score.defeats}).`, 'var(--accent-cyan)');
@@ -55423,7 +55423,7 @@ function showPlayerDeckContextMenu(e) {
       }
     },
     {
-      text: "👧 [Inicio con Lyna BBX-SP403] Simular inicio de batalla con Lyna como Personaje Inicial (5 cartas)",
+      text: "👧 [Inicio con Lyna BBX-SP403] Simular inicio de partida con Lyna como Personaje Inicial (5 cartas)",
       action: () => {
         startMatchSequence('BBX-SP403');
       }

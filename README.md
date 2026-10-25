@@ -17,7 +17,7 @@
     *   **Portador de Skills:** Ciertas cartas de tipo *Skill* especifican *"Esta carta solo puede ser portada por [Personaje]"*, lo que limita su equipamiento únicamente a dicho personaje o personajes nombrados.
 *   **Preparación de la Partida (Setup):**
     1. Cada jugador elige un monstruo de su mazo y lo coloca boca abajo (este será su personaje inicial).
-    2. Se lanza un dado; el ganador decide quién comenzará la batalla.
+    2. Se lanza un dado; el ganador decide quién comenzará la partida.
     3. Ambos jugadores roban sus 3 cartas iniciales.
     4. Se revelan los personajes iniciales (se voltean boca arriba) y comienza el juego.
 *   **Dinámica de Combate:** Los personajes equipan "Skills" (habilidades/defensas). Al atacar o defender, ambos personajes pierden 1 Skill. Si un personaje sin Skills es atacado, es derrotado.
@@ -32,7 +32,7 @@
     *   Atacar gira al personaje (posición horizontal).
     *   **Sin personaje al final del turno:** Si al final de tu turno no tienes un personaje activo en juego, debes colocar uno de tu mazo en la banca. Inmediatamente después de esto, tu turno termina y comienza el del oponente.
 *   **Reglas de Torneo Oficial y Estructura de Partida:**
-    *   **Mejor de 3 (Bo3):** Las partidas oficiales son al mejor de 3 batallas.
+    *   **Mejor de 3 (Bo3):** Las partidas oficiales son al mejor de 3 partidas.
     *   **Tiempo de Ronda:** El tiempo máximo por ronda de torneo es de **30 minutos**.
     *   **Side Decking:** El tiempo máximo permitido para realizar cambios con el Side Deck entre partidas de un Bo3 es de **2 minutos**.
     *   **Protectores Obligatorios (Sleeves):** Es obligatorio el uso de protectores. Todos deben ser del mismo color y tamaño en todas las cartas (incluyendo el Side Deck).

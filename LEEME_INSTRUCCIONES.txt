@@ -5,7 +5,7 @@
 
 ¡Bienvenido a Skill Blast X!
 Este paquete contiene el simulador completo con 429 cartas registradas,
-sistema de batallas automáticas contra la Inteligencia Artificial y mesa de pruebas.
+sistema de partidas automáticas contra la Inteligencia Artificial y mesa de pruebas.
 
 --------------------------------------------------------------------------------
 ¿CÓMO JUGAR? (INSTRUCCIONES RÁPIDAS)
@@ -17,7 +17,7 @@ sistema de batallas automáticas contra la Inteligencia Artificial y mesa de pru
    - ¡No necesitas instalar Python, Node.js ni configurar nada adicional!
 
 2. MODOS DE JUEGO PRINCIPALES:
-   - ⚔️ BATALLA (VS IA):
+   - ⚔️ PARTIDA (VS IA):
      Juega partidas completas contra la IA. Puedes elegir tu mazo y el mazo
      de la IA para poner a prueba tus estrategias.
    - 🃏 CREADOR DE MAZOS (Deckbuilder):
@@ -27,7 +27,7 @@ sistema de batallas automáticas contra la Inteligencia Artificial y mesa de pru
      Prueba combos y prepara situaciones hipotéticas enfrentándote a una copia
      de tu propio mazo con la mano rival visible, siguiendo las reglas oficiales.
 
-3. REGLAS BÁSICAS DE BATALLA:
+3. REGLAS BÁSICAS DE PARTIDA:
    - En el Turno 1 no se pueden declarar ataques.
    - Cuando dos personajes combaten, ambos se infligen daño mutuo ("se pegan").
    - Un personaje con Skills equipadas pierde 1 Skill al recibir daño en batalla.
