@@ -519,6 +519,10 @@ async function confirmAndLaunchDuel() {
     }
   }
 
+  // Guardar snapshot de los mazos configurados para reiniciar partidas fielmente
+  playtestState.configuredOpponentDeck = [...playtestState.opponentDeck];
+  playtestState.configuredPlayerDeck = currentDeck && currentDeck.main ? [...currentDeck.main] : [...playtestState.deck];
+
   // 3. Determinar quién empieza el duelo
   if (chosenFirst === 'player') {
     playtestState.turnOwner = 'player';
@@ -1528,7 +1532,11 @@ function restartPlaytest() {
     return;
   }
   playtestState.matchEnded = false;
-  playtestState.deck = [...currentDeck.main];
+  if (playtestState.configuredPlayerDeck && playtestState.configuredPlayerDeck.length > 0) {
+    playtestState.deck = [...playtestState.configuredPlayerDeck];
+  } else if (currentDeck && currentDeck.main) {
+    playtestState.deck = [...currentDeck.main];
+  }
   playtestState.hand = [];
   playtestState.grave = [];
   playtestState.bench = [];
@@ -1538,8 +1546,12 @@ function restartPlaytest() {
     { character: null, skills: [], usedSkills: [], usedSkillIndexes: [], maxAttacks: 1, attacksDeclared: 0, isRotated: false, effectUsed: false, muroUsadoEsteTurno: false, isFaceDown: false }
   ];
   
-  // Reiniciar Oponente (Copia del mazo actual como rival para simulación fluida)
-  playtestState.opponentDeck = [...currentDeck.main];
+  // Reiniciar Oponente: Conservar el mazo configurado para la IA / rival si existe
+  if (playtestState.configuredOpponentDeck && playtestState.configuredOpponentDeck.length > 0) {
+    playtestState.opponentDeck = [...playtestState.configuredOpponentDeck];
+  } else if (currentDeck && currentDeck.main) {
+    playtestState.opponentDeck = [...currentDeck.main];
+  }
   playtestState.opponentHand = [];
   playtestState.opponentGrave = [];
   playtestState.opponentBench = [];
@@ -6461,7 +6473,8 @@ function updatePlaytestView() {
         cardEl.innerHTML = `<img src="/imagenes/reverso.jpg" alt="Carta Rival" class="card-back-img" style="border: 1px solid rgba(255, 60, 60, 0.35);">`;
       }
       
-      if (!playtestState.isOnlineMatch) {
+      const isFaceUpHand = !playtestState.isDuelVsAI && !playtestState.isOnlineMatch;
+      if (isFaceUpHand) {
         attachCardHover(cardEl, id);
         cardEl.draggable = true;
         cardEl.addEventListener('dragstart', (e) => {

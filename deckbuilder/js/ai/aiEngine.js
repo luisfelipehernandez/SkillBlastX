@@ -458,9 +458,19 @@
             const handToShuffle = playtestState.opponentHand.pop();
             playtestState.opponentDeck.push(handToShuffle);
             if (typeof root.shuffleArray === 'function') root.shuffleArray(playtestState.opponentDeck);
+            const charCard = slot ? root.cardsDatabase[slot.character] : null;
+            const isArcanoChar = charCard && (charCard.id === 'BBX-SP244' || charCard.evolucion === 'Modo arcano' || charCard.nombre?.includes('Modo arcano'));
             const gIdx = playtestState.opponentGrave.findIndex(id => {
               const c = root.cardsDatabase[id];
-              return c && c.tipo === 'Skill' && c.portador && c.portador.includes('Haruka');
+              if (!c || c.tipo !== 'Skill' || !c.portador) return false;
+              if (c.portador.includes('Modo arcano') || id === 'BBX-SP245' || id === 'BBX-SP268') {
+                return isArcanoChar;
+              }
+              const matcher = (root && typeof root.isCarrierMatch === 'function')
+                ? root.isCarrierMatch
+                : (typeof isCarrierMatch === 'function' ? isCarrierMatch : null);
+              if (matcher && charCard) return matcher(c.portador, charCard);
+              return c.portador.includes('Haruka');
             });
             if (gIdx !== -1) {
               const recovered = playtestState.opponentGrave.splice(gIdx, 1)[0];

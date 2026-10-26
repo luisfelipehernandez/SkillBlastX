@@ -466,13 +466,23 @@
 
           let canEquip = true;
           if (card.portador) {
+            const isArcanoChar = charCard && (charCard.id === 'BBX-SP244' || charCard.evolucion === 'Modo arcano' || charCard.nombre?.includes('Modo arcano'));
+            const isArcanoSkill = card.portador.includes('Modo arcano') || cardId === 'BBX-SP245' || cardId === 'BBX-SP268';
+            if (isArcanoSkill && !isArcanoChar) {
+              // NUNCA equipar Skills exclusivas de Haruka Modo Arcano a una Haruka normal
+              continue;
+            }
             const matcher = (root && typeof root.isCarrierMatch === 'function')
               ? root.isCarrierMatch
               : (typeof isCarrierMatch === 'function' ? isCarrierMatch : null);
             if (matcher) {
               canEquip = matcher(card.portador, charCard);
             } else {
-              canEquip = card.portador.includes('Haruka') && charCard.nombre.includes('Haruka');
+              if (isArcanoSkill) {
+                canEquip = isArcanoChar;
+              } else {
+                canEquip = card.portador.includes('Haruka') && charCard.nombre.includes('Haruka');
+              }
             }
           }
 
