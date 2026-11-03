@@ -1844,16 +1844,6 @@ body {
   -webkit-user-drag: none !important;
 }
 
-/* Si la carta rota por ataque, mantener las skills y el badge orientados */
-.in-game-card.rotated .slot-skills {
-  transform: translateX(-50%) rotate(-90deg);
-  transform-origin: center center;
-}
-
-.in-game-card.rotated .slot-skills-badge {
-  transform: rotate(-90deg);
-  transform-origin: center center;
-}
 
 /* Soporte de filas del campo */
 .mat-upper-row {

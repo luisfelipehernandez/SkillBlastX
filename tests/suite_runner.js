@@ -118,6 +118,9 @@ function extractFunction(name) {
 }
 
 const funcsToExtract = [
+  'makeSlotSkillsReactive',
+  'isEquippedSkillUsed',
+  'removeSkillFromSlotByIndex',
   'executeEncantamientoSP316',
   'executeCaosCarmesiSP328',
   'checkAndTriggerPlanDeSupervivencia',
@@ -263,6 +266,44 @@ global.playtestState = {
   opponentSlots: []
 };
 assert(window.RulesEngine.isIncrustarEspadaActive() === true, "Incrustar espada SP366 activo en campo");
+
+// =========================================================================
+// MÓDULO 9: SINCRONIZACIÓN Y REACTIVIDAD DE SKILLS AL PERDER SKILLS EN BATALLA
+// =========================================================================
+console.log('\n\x1b[33m%s\x1b[0m', '[MÓDULO 9] Ciclo de Vida de Skills y Reactividad al Perder Skills en Batalla');
+const testSlotReactive = {
+  character: 'BBX-SP166', // Deida
+  skills: ['BBX-SP001', 'BBX-SP023'], // Skill 0 (Investigación), Skill 1 (¡Desatar!)
+  usedSkillIndexes: [],
+  usedSkills: []
+};
+makeSlotSkillsReactive(testSlotReactive);
+
+// 1. Simular uso de Skill en índice 0
+testSlotReactive.usedSkillIndexes.push(0);
+testSlotReactive.usedSkills.push('BBX-SP001');
+
+// 2. En combate, se pierde la Skill del índice 0
+testSlotReactive.skills.splice(0, 1);
+
+// 3. ¡Desatar! (BBX-SP023) ahora está en índice 0 y NO debe quedar bloqueada
+assert(testSlotReactive.skills[0] === 'BBX-SP023', "¡Desatar! se acomodó en el índice 0 tras perder la primera Skill");
+assert(testSlotReactive.usedSkillIndexes.includes(0) === false, "¡Desatar! NO heredó el bloqueo del índice 0 previo");
+assert(isEquippedSkillUsed(testSlotReactive, 'BBX-SP023', 0, 'player') === false, "isEquippedSkillUsed permite activar ¡Desatar! libremente");
+
+// 4. Caso inverso: si se usó la Skill 1 y muere la Skill 0, la Skill usada debe conservar su uso en su nuevo índice
+const testSlotShift = {
+  character: 'BBX-SP166',
+  skills: ['BBX-SP001', 'BBX-SP002'],
+  usedSkillIndexes: [],
+  usedSkills: []
+};
+makeSlotSkillsReactive(testSlotShift);
+testSlotShift.usedSkillIndexes.push(1);
+testSlotShift.usedSkills.push('BBX-SP002');
+testSlotShift.skills.splice(0, 1);
+assert(testSlotShift.usedSkillIndexes.includes(0) === true, "La Skill usada conserva correctamente su estado al desplazarse al índice 0");
+assert(isEquippedSkillUsed(testSlotShift, 'BBX-SP002', 0, 'player') === true, "isEquippedSkillUsed reporta usada la Skill correcta");
 
 // =========================================================================
 // RESUMEN FINAL

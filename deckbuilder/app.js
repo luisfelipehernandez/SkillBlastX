@@ -1561,6 +1561,11 @@ function restartPlaytest() {
     { character: null, skills: [], usedSkills: [], usedSkillIndexes: [], maxAttacks: 1, attacksDeclared: 0, isRotated: false, effectUsed: false, muroUsadoEsteTurno: false, isFaceDown: false }
   ];
 
+  if (typeof makeSlotSkillsReactive === 'function') {
+    playtestState.slots.forEach(s => makeSlotSkillsReactive(s));
+    playtestState.opponentSlots.forEach(s => makeSlotSkillsReactive(s));
+  }
+
   playtestState.pendingRoy339SearchPlayer = 0;
   playtestState.pendingRoy339SearchOpponent = 0;
   playtestState.usedBajoLaLuzLunarGraveCount = 0;
@@ -6230,23 +6235,87 @@ if (typeof global !== 'undefined') {
 }
 
 // Funciones de utilidad para el ciclo de vida de Skills equipadas
-function removeSkillFromSlotByIndex(slot, skIdx) {
-  if (!slot || !slot.skills || skIdx < 0 || skIdx >= slot.skills.length) return null;
-  const removedId = slot.skills.splice(skIdx, 1)[0];
-  if (slot.usedSkillIndexes && Array.isArray(slot.usedSkillIndexes)) {
-    const wasUsedPos = slot.usedSkillIndexes.indexOf(skIdx);
-    if (wasUsedPos !== -1) {
-      slot.usedSkillIndexes.splice(wasUsedPos, 1);
+function makeSlotSkillsReactive(slot) {
+  if (!slot) return;
+  if (!Array.isArray(slot.usedSkillIndexes)) slot.usedSkillIndexes = [];
+  if (!Array.isArray(slot.usedSkills)) slot.usedSkills = [];
+
+  const attachToArray = (arr) => {
+    if (!arr || arr._reactiveAttached) return;
+    arr._reactiveAttached = true;
+
+    const originalSplice = arr.splice;
+    arr.splice = function(start, deleteCount, ...items) {
+      const len = this.length;
+      let actualStart = start < 0 ? Math.max(len + start, 0) : Math.min(start, len);
+      let actualDeleteCount = deleteCount === undefined 
+        ? (len - actualStart) 
+        : Math.min(Math.max(deleteCount, 0), len - actualStart);
+
+      const removedSkills = this.slice(actualStart, actualStart + actualDeleteCount);
+
+      // Sincronizar slot.usedSkillIndexes para que no se desfasen los índices al removerse skills
+      if (slot.usedSkillIndexes && Array.isArray(slot.usedSkillIndexes)) {
+        const updated = [];
+        for (const idx of slot.usedSkillIndexes) {
+          if (idx >= actualStart && idx < actualStart + actualDeleteCount) {
+            // La skill removida deja de estar usada en este slot
+          } else if (idx >= actualStart + actualDeleteCount) {
+            // Se desplaza según los elementos removidos e insertados
+            const newIdx = idx - actualDeleteCount + items.length;
+            if (newIdx >= 0) updated.push(newIdx);
+          } else {
+            updated.push(idx);
+          }
+        }
+        slot.usedSkillIndexes = updated;
+      }
+
+      // Sincronizar slot.usedSkills para no retener copias de skills destruidas o enviadas al cementerio
       if (slot.usedSkills && Array.isArray(slot.usedSkills)) {
-        const uPos = slot.usedSkills.indexOf(removedId);
-        if (uPos !== -1) {
-          slot.usedSkills.splice(uPos, 1);
+        for (const remId of removedSkills) {
+          const uPos = slot.usedSkills.indexOf(remId);
+          if (uPos !== -1) {
+            slot.usedSkills.splice(uPos, 1);
+          }
         }
       }
-    }
-    slot.usedSkillIndexes = slot.usedSkillIndexes.map(idx => (idx > skIdx ? idx - 1 : idx));
+
+      return originalSplice.call(this, start, deleteCount, ...items);
+    };
+
+    arr.pop = function() {
+      if (this.length === 0) return undefined;
+      return this.splice(this.length - 1, 1)[0];
+    };
+
+    arr.shift = function() {
+      if (this.length === 0) return undefined;
+      return this.splice(0, 1)[0];
+    };
+  };
+
+  let _skills = Array.isArray(slot.skills) ? slot.skills : [];
+  attachToArray(_skills);
+
+  const desc = Object.getOwnPropertyDescriptor(slot, 'skills');
+  if (!desc || !desc.set) {
+    Object.defineProperty(slot, 'skills', {
+      get() { return _skills; },
+      set(newArr) {
+        _skills = Array.isArray(newArr) ? newArr : [];
+        attachToArray(_skills);
+      },
+      configurable: true,
+      enumerable: true
+    });
   }
-  return removedId;
+}
+
+function removeSkillFromSlotByIndex(slot, skIdx) {
+  if (!slot || !slot.skills || skIdx < 0 || skIdx >= slot.skills.length) return null;
+  makeSlotSkillsReactive(slot);
+  return slot.skills.splice(skIdx, 1)[0];
 }
 
 function isEquippedSkillUsed(slot, skId, skIndex, owner = 'player') {
@@ -6303,16 +6372,24 @@ function isEquippedSkillUsed(slot, skId, skIndex, owner = 'player') {
 }
 
 if (typeof window !== 'undefined') {
+  window.makeSlotSkillsReactive = makeSlotSkillsReactive;
   window.removeSkillFromSlotByIndex = removeSkillFromSlotByIndex;
   window.isEquippedSkillUsed = isEquippedSkillUsed;
 }
 if (typeof global !== 'undefined') {
+  global.makeSlotSkillsReactive = makeSlotSkillsReactive;
   global.removeSkillFromSlotByIndex = removeSkillFromSlotByIndex;
   global.isEquippedSkillUsed = isEquippedSkillUsed;
 }
 
 // Actualizar tablero de Playtest
 function updatePlaytestView() {
+  // Asegurar reactividad y sincronización continua en todos los slots
+  for (let sIdx = 0; sIdx < 3; sIdx++) {
+    if (playtestState.slots && playtestState.slots[sIdx]) makeSlotSkillsReactive(playtestState.slots[sIdx]);
+    if (playtestState.opponentSlots && playtestState.opponentSlots[sIdx]) makeSlotSkillsReactive(playtestState.opponentSlots[sIdx]);
+  }
+
   const deckCountEl = document.getElementById('playtest-deck-count');
   if (deckCountEl) deckCountEl.textContent = playtestState.deck.length;
 
@@ -6622,12 +6699,12 @@ function updatePlaytestView() {
       const skillsCount = slotData.skills.length;
 
       // Badge contador elegante de Skills portadas en la esquina superior
+      let badge = null;
       if (skillsCount > 0) {
-        const badge = document.createElement('div');
+        badge = document.createElement('div');
         badge.className = 'slot-skills-badge';
         badge.innerHTML = `🛡️ ${skillsCount}`;
         badge.title = `${skillsCount} Skill${skillsCount > 1 ? 's' : ''} portada${skillsCount > 1 ? 's' : ''}`;
-        cardEl.appendChild(badge);
       }
 
       // Solapamiento dinámico inteligente para que NUNCA se achiquen
@@ -6663,13 +6740,14 @@ function updatePlaytestView() {
         
         skillsContainer.appendChild(skEl);
       });
-      cardEl.appendChild(skillsContainer);
       
       cardEl.addEventListener('dragstart', (e) => {
         e.dataTransfer.setData('text/plain', JSON.stringify({ source: `slot-${i}`, id: slotData.character }));
       });
       
       slotEl.appendChild(cardEl);
+      if (badge) slotEl.appendChild(badge);
+      slotEl.appendChild(skillsContainer);
     } else {
       slotEl.onclick = null;
       if (placeholder) placeholder.style.display = 'block';
@@ -6726,12 +6804,12 @@ function updatePlaytestView() {
       const oppSkillsCount = slotData.skills.length;
 
       // Badge contador elegante de Skills portadas por el rival
+      let oppBadge = null;
       if (oppSkillsCount > 0) {
-        const badge = document.createElement('div');
-        badge.className = 'slot-skills-badge opponent-badge';
-        badge.innerHTML = `🛡️ ${oppSkillsCount}`;
-        badge.title = `${oppSkillsCount} Skill${oppSkillsCount > 1 ? 's' : ''} portada${oppSkillsCount > 1 ? 's' : ''}`;
-        cardEl.appendChild(badge);
+        oppBadge = document.createElement('div');
+        oppBadge.className = 'slot-skills-badge opponent-badge';
+        oppBadge.innerHTML = `🛡️ ${oppSkillsCount}`;
+        oppBadge.title = `${oppSkillsCount} Skill${oppSkillsCount > 1 ? 's' : ''} portada${oppSkillsCount > 1 ? 's' : ''}`;
       }
 
       let oppOverlapMargin = 0;
@@ -6766,7 +6844,6 @@ function updatePlaytestView() {
         
         skillsContainer.appendChild(skEl);
       });
-      cardEl.appendChild(skillsContainer);
       
       if (!playtestState.isOnlineMatch) {
         cardEl.addEventListener('dragstart', (e) => {
@@ -6775,6 +6852,8 @@ function updatePlaytestView() {
       }
       
       slotEl.appendChild(cardEl);
+      if (oppBadge) slotEl.appendChild(oppBadge);
+      slotEl.appendChild(skillsContainer);
     } else {
       slotEl.onclick = null;
       if (placeholder) placeholder.style.display = 'block';

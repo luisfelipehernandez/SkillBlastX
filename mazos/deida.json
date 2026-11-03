@@ -14,14 +14,12 @@
     "BBX-SP023",
     "BBX-SP023",
     "BBX-SP037",
-    "BBX-SP045",
     "BBX-SP060",
     "BBX-SP060",
     "BBX-SP060",
     "BBX-SP092",
     "BBX-SP092",
     "BBX-SP131",
-    "BBX-SP167",
     "BBX-SP172",
     "BBX-SP174",
     "BBX-SP174",
@@ -34,18 +32,20 @@
     "BBX-SP264",
     "BBX-SP264",
     "BBX-SP264",
-    "BBX-SP265"
+    "BBX-SP265",
+    "BBX-SP411",
+    "BBX-SP290"
   ],
   "side": [
-    "BBX-SP136",
-    "BBX-SP335",
-    "BBX-SP045",
-    "BBX-SP112",
-    "BBX-SP112",
-    "BBX-SP167",
+    "BBX-SP084",
     "BBX-SP198",
-    "BBX-SP224",
+    "BBX-SP198",
+    "BBX-SP198",
     "BBX-SP290",
-    "BBX-SP366"
+    "BBX-SP381",
+    "BBX-SP374",
+    "BBX-SP224",
+    "BBX-SP128",
+    "BBX-SP411"
   ]
 }
